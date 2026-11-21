@@ -49,7 +49,7 @@ O sistema deve:
 
 - Permitir execução de comandos via interface TUI
 - Carregar automaticamente novos comandos (plugins)
-- Exibir saída estruturada e com scroll (RichLog)
+- Exibir saída estruturada com quebra automática de linha e scroll vertical (RichLog)
 - Suportar passagem de argumentos aos comandos
 - Permitir fácil extensão sem alterar o core
 
@@ -118,7 +118,7 @@ crivonansky/
 ### Interface
 
 - Input de comandos no rodapé
-- Área de saída com scroll (RichLog)
+- Área de saída com quebra automática de linha e scroll vertical (RichLog), com reflow ao redimensionar
 - Exibição de comandos executados
 - Feedback visual com cores
 
@@ -267,10 +267,17 @@ Cada requisição cria um executor **novo** via `core/bootstrap.py:build_executo
 
 ### TUI
 
-- Dado que o usuário digita `/`, então deve aparecer um dropdown com comandos disponíveis
+- Dado que o usuário digita `/`, então deve aparecer um dropdown com comandos disponíveis e suas descrições
 - Dado que o usuário pressiona `↑/↓`, então deve navegar pelo histórico de comandos
 - Dado que o usuário pressiona `Escape`, então deve fechar o dropdown
-- Dado que o usuário pressiona `Enter` com dropdown visível, então deve popular o input sem executar
+- Dado que o usuário pressiona `Tab` com dropdown visível, então deve completar o comando sem executá-lo
+- Dado que o usuário pressiona `Enter` com dropdown visível e texto incompleto, então deve popular o input sem executar
+- Dado que o usuário pressiona `Enter` com o comando completo, então deve executá-lo
+- Dado que o output contém uma linha maior que o terminal, então deve quebrar automaticamente, sem scroll horizontal
+- Dado que a janela é redimensionada, então as linhas já exibidas devem ser re-renderizadas na nova largura
+- Dado que o usuário pressiona `Ctrl+F`, então deve abrir a busca com destaque das ocorrências
+- Dado que o usuário pressiona `Ctrl+S`, então deve salvar o output em texto puro
+- Dado que o usuário digita `F4`, então deve alternar a quebra de linha
 
 ---
 

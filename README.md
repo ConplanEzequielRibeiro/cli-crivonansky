@@ -9,11 +9,12 @@ Framework de CLI extensível com interface TUI (Terminal User Interface) baseada
 
 ## Funcionalidades
 
-- Interface TUI com input, output com scroll e dropdown de comandos
+- Interface TUI com input, output com quebra automática de linha (sem scroll horizontal) e dropdown de comandos
 - Carregamento dinâmico de plugins (basta criar um arquivo em `commands/`)
 - Comandos com prefixo `/` e suporte a argumentos (`--flag valor`)
-- Histórico de comandos navegável com `↑`/`↓`
-- Dropdown de comandos ao digitar `/`
+- Histórico de comandos navegável com `↑`/`↓`, persistido entre sessões
+- Dropdown de comandos ao digitar `/`, com descrição e compleção por `Tab`
+- Busca no output (`Ctrl+F`), exportação em texto puro (`Ctrl+S`) e toggle de quebra de linha (`F4`)
 - Geração automática de novos plugins via comando interno
 - Task runner no estilo gulp.js (tasks com src/dest, series/parallel, watch mode)
 - Integração híbrida: tasks podem chamar comandos da CLI via `cmd()`
@@ -38,6 +39,22 @@ pip install -r requirements.txt
 ```bash
 python crivonansky.py
 ```
+
+### Atalhos da TUI
+
+| Atalho | Ação |
+|---|---|
+| `↑` / `↓` | Navega pelo histórico (persistido em `platformdirs`/`CRIVONANSKY_HISTORY`) |
+| `Tab` | Completa o comando destacado no dropdown |
+| `Ctrl+F` | Busca no output; `Enter` vai para a próxima ocorrência, `Esc` fecha |
+| `Ctrl+S` | Salva o output em texto puro (`crivonansky-output-*.txt` ou `CRIVONANSKY_OUTPUT_DIR`) |
+| `F2` | Volta ao fim do log e retoma o auto-scroll |
+| `F4` | Liga/desliga a quebra de linha |
+| `Ctrl+L` | Limpa o log |
+| `Ctrl+Q` | Sai |
+
+O output quebra automaticamente na largura do terminal e é re-renderizado ao
+redimensionar a janela (reflow), sem barra de rolagem horizontal.
 
 ### REST API
 
@@ -238,6 +255,7 @@ crivonansky/
 │   ├── work_analysis.py
 │   └── harness/           # Plugin autocontido (install, vendor, fixture, workspace)
 ├── tui_app.py             # Interface TUI (Textual)
+├── tui_log.py             # Widget de output (wrap, reflow, busca, export)
 ├── api_server.py          # API REST (FastAPI)
 ├── api.ps1                # Launcher da API (ativa o .venv)
 ├── crivonansky.py         # Entry point

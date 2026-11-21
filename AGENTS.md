@@ -13,7 +13,7 @@
 - **`core/run/`** — task runner subsystem (gulp.js-style). `task`, `src`, `dest`, `series`, `parallel`, `watch`, `cmd`. Loads `runfile.py` dynamically. See dedicated section below.
 - **`commands/`** — plugins auto-discovered by `loader.py`. Any `.py` file with a class inheriting `Command` is loaded.
 - **`commands/complements/`** — internal dependencies of plugins (not auto-discovered). Sub-packages: `task_plugin/`, `db_tools_plugin/`, `load_app_plugin/` (includes `VirtualDesktop11.exe` binary), and `harness/` (self-contained harness plugin with its own `.venv`, `vendor/`, `workspace/` and `fixture/`).
-- **TUI** (`tui_app.py`) — Textual app. Built-in commands `/clear` and `/quit` are handled in TUI, not as plugins. Dropdown on `/` key, history with `↑`/`↓`.
+- **TUI** (`tui_app.py` + `tui_log.py`) — Textual app. Built-in commands `/clear` and `/quit` are handled in TUI, not as plugins. Dropdown on `/` key (with descriptions and `Tab` completion), history with `↑`/`↓` (persisted via `platformdirs`; override with `CRIVONANSKY_HISTORY`). `WrappingRichLog` wraps at the panel width, re-renders on resize (reflow), pauses auto-scroll on wheel-up and adds search (`Ctrl+F`), save (`Ctrl+S`), end (`F2`), wrap toggle (`F4`) and clear (`Ctrl+L`). Output export honors `CRIVONANSKY_OUTPUT_DIR`.
 - **Config files** (root JSON): `environment_conf.json`, `workspace_conf.json`, `metrics_report_conf.json` — read by specific plugins.
 
 ## Commands
@@ -189,8 +189,9 @@ def rebuild():
 - **`--help` / `-h`**: intercepted by `CommandExecutor` before `execute()` is called. Plugins override `help_text` class attribute to customize.
 - **`execute` return contract**: every `execute(args)` must `return (sucesso: bool, dados: dict | None)`. `True` = success, `False` = failure; `dados` is an optional dict with developer-defined info. No code path may return `None` (the executor defensively treats `None` as `(True, None)`). The executor stores the tuple in `executor.last_result` for programmatic use.
 - **`parse_args`**: built into `Command` base class. Handles `--flag value` and `--bool-flag`. Does NOT use `shlex` (the parser in `core/parser.py` uses `shlex` for the command line, but `Command.parse_args` does not).
-- **Output**: commands use `print()` — stdout is captured by `CommandExecutor` via `io.StringIO` and displayed in the TUI's `RichLog`.
+- **Output**: commands use `print()` — stdout is captured by `CommandExecutor` via `io.StringIO` and displayed in the TUI's `WrappingRichLog` (automatic line wrapping; no horizontal scroll).
 - **Error display**: use `print("[red]...[/red]")` — Rich markup is rendered by the TUI.
+- **Progress lines**: the harness progress sink writes through `tui_app._write_progress`, which escapes Rich markup so literal prefixes like `[db:links]` survive. Do not interpolate raw bracket text into Rich markup elsewhere in the TUI.
 
 ## Windows-specific
 
@@ -200,7 +201,8 @@ def rebuild():
 
 ## Testing
 
-- Run the automated tests with `.venv\Scripts\python.exe -m pytest tests -q` (harness + command tests).
+- Run the automated tests with `.venv\Scripts\python.exe -m pytest tests -q` (harness + command + TUI tests).
+- TUI tests (`tests/test_tui.py`) run headless via `App.run_test` inside `asyncio.run` (no `pytest-asyncio` dependency) and cover wrapping, reflow, search, history and status.
 - Validation is manual: `python crivonansky.py` then type commands.
 - Syntax check: `.venv\Scripts\python.exe -m py_compile <file>`.
 
