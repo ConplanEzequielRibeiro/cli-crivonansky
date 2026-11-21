@@ -10,6 +10,7 @@ Framework de CLI extensível com interface TUI (Terminal User Interface) baseada
 ## Funcionalidades
 
 - Interface TUI com input, output com quebra automática de linha (sem scroll horizontal) e dropdown de comandos
+- Arte em caracteres do boneco (com cigarro) escorado no nome estilizado, exibida como texto inicial no painel de saída
 - Carregamento dinâmico de plugins (basta criar um arquivo em `commands/`)
 - Comandos com prefixo `/` e suporte a argumentos (`--flag valor`)
 - Histórico de comandos navegável com `↑`/`↓`, persistido entre sessões
@@ -54,7 +55,10 @@ python crivonansky.py
 | `Ctrl+Q` | Sai |
 
 O output quebra automaticamente na largura do terminal e é re-renderizado ao
-redimensionar a janela (reflow), sem barra de rolagem horizontal.
+redimensionar a janela (reflow), sem barra de rolagem horizontal. Ao iniciar, a
+arte em caracteres (boneco com cigarro escorado no nome estilizado) é escrita como texto
+inicial no painel de saída — em terminais com menos de 60 colunas é usada uma
+versão compacta. A arte some com `/clear` ou `Ctrl+L`.
 
 ### REST API
 
@@ -256,6 +260,7 @@ crivonansky/
 │   └── harness/           # Plugin autocontido (install, vendor, fixture, workspace)
 ├── tui_app.py             # Interface TUI (Textual)
 ├── tui_log.py             # Widget de output (wrap, reflow, busca, export)
+├── tui_logo.py            # Arte em caracteres do banner inicial
 ├── api_server.py          # API REST (FastAPI)
 ├── api.ps1                # Launcher da API (ativa o .venv)
 ├── crivonansky.py         # Entry point

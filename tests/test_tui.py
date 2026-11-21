@@ -84,7 +84,9 @@ def test_progress_preserves_literal_task_prefix(tmp_path, monkeypatch):
 
             text = "\n".join(line.text for line in log.lines)
             assert "[db:links]" in text
-            assert log.export_text() == "[db:links] 10/20"
+            exported = log.export_text()
+            assert "digite /help" in exported
+            assert exported.endswith("[db:links] 10/20")
 
     asyncio.run(scenario())
 
@@ -195,6 +197,54 @@ def test_history_navigation_does_not_open_dropdown(tmp_path, monkeypatch):
             await pilot.pause()
             assert app.input.value == "/echo --x"
             assert app.dropdown.display is False
+
+    asyncio.run(scenario())
+
+
+def test_banner_is_written_on_startup(tmp_path, monkeypatch):
+    app = make_app(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            log = app.query_one("#output", WrappingRichLog)
+            text = "\n".join(line.text for line in log.lines)
+            assert "🚬╱" in text
+            assert "┏━╸" in text
+            assert "digite /help" in text
+            assert app.focused is app.input
+
+    asyncio.run(scenario())
+
+
+def test_banner_is_cleared_with_output(tmp_path, monkeypatch):
+    app = make_app(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(80, 20)) as pilot:
+            await pilot.pause()
+            log = app.query_one("#output", WrappingRichLog)
+            assert "🚬╱" in "\n".join(l.text for l in log.lines)
+
+            await pilot.press("ctrl+l")
+            await pilot.pause()
+            assert log.lines == []
+
+    asyncio.run(scenario())
+
+
+def test_banner_uses_compact_art_on_narrow_terminal(tmp_path, monkeypatch):
+    app = make_app(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(50, 20)) as pilot:
+            await pilot.pause()
+            log = app.query_one("#output", WrappingRichLog)
+            text = "\n".join(line.text for line in log.lines)
+            assert "🚬╱" in text
+            assert "CLI CRIVONANSKY" in text
+            assert "digite /help" in text
+            assert "┏━╸" not in text
 
     asyncio.run(scenario())
 

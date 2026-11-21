@@ -29,6 +29,7 @@ from textual.containers import Container, Horizontal
 from textual.widgets import Input, Label, ListItem, ListView
 
 from tui_log import WrappingRichLog
+from tui_logo import banner
 
 
 class PromptInput(Input):
@@ -70,7 +71,7 @@ class MyCLIApp(App):
 
     #header {
         layout: horizontal;
-        height: 4;
+        height: 3;
         background: $primary;
         color: $text;
         padding: 0 1;
@@ -81,23 +82,8 @@ class MyCLIApp(App):
         height: 1;
     }
 
-    #header.compact #pixel-art {
-        display: none;
-    }
-
     #header.compact #app-title {
         content-align: left middle;
-    }
-
-    #pixel-art {
-        layout: vertical;
-        width: auto;
-        margin-right: 1;
-    }
-
-    #pixel-art Label {
-        height: 1;
-        text-style: bold;
     }
 
     #app-title {
@@ -218,12 +204,6 @@ class MyCLIApp(App):
 
     def compose(self) -> ComposeResult:
         yield Container(
-            Container(
-                Label("    O    "),
-                Label("🚬 /|\\ "),
-                Label("   / \\   "),
-                id="pixel-art"
-            ),
             Label("CLI Crivonansky", id="app-title"),
             id="header"
         )
@@ -269,6 +249,7 @@ class MyCLIApp(App):
 
         self._set_status(self.IDLE_STATUS)
         self._update_header(self.size.width)
+        self._write_banner()
         self.input.focus()
 
     def on_unmount(self):
@@ -278,6 +259,14 @@ class MyCLIApp(App):
 
     def on_resize(self, event) -> None:
         self._update_header(event.size.width)
+
+    def _write_banner(self) -> None:
+        """Exibe a arte como texto inicial do log."""
+        try:
+            compact = 0 < self.size.width < 60
+            self.output.write(banner(compact=compact))
+        except Exception:  # noqa: BLE001 - app encerrando
+            pass
 
     def _update_header(self, width: int) -> None:
         try:

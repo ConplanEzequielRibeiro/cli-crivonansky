@@ -119,6 +119,7 @@ crivonansky/
 
 - Input de comandos no rodapé
 - Área de saída com quebra automática de linha e scroll vertical (RichLog), com reflow ao redimensionar
+- Arte em caracteres do boneco com cigarro escorado no nome estilizado, exibida como texto inicial no painel de saída (versão compacta abaixo de 60 colunas)
 - Exibição de comandos executados
 - Feedback visual com cores
 
@@ -278,6 +279,7 @@ Cada requisição cria um executor **novo** via `core/bootstrap.py:build_executo
 - Dado que o usuário pressiona `Ctrl+F`, então deve abrir a busca com destaque das ocorrências
 - Dado que o usuário pressiona `Ctrl+S`, então deve salvar o output em texto puro
 - Dado que o usuário digita `F4`, então deve alternar a quebra de linha
+- Dado que a TUI inicia, então deve exibir a arte em caracteres do boneco com cigarro escorado no nome estilizado como texto inicial no output
 
 ---
 
