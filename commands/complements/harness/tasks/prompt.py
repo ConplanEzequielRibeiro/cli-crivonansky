@@ -15,14 +15,24 @@ params: { ... }
 ```
 
 Regras:
-1. Use apenas tarefas do catálogo: env:check, context:pack, file:read, code:query, code:impact,
-   db:schema, db:query (somente SELECT), db:links, rag:search, git:run, shell:run, py:run,
-   docker:exec, logs:tail, patch:apply, test:run, verify, lint.
-2. Prefira tarefas de leitura para investigar antes de propor mudanças.
-3. Para alterar código, use patch:apply com diff unificado e verify: true.
-4. Após emitir blocos, PARE e aguarde o bloco ```crivonansky-result.
-5. Nunca invente resultados; baseie-se apenas nos blocos de resultado recebidos.
-6. Se o status for failure/error/denied/timeout, analise o summary/details antes de tentar de novo."""
+1. Use apenas tarefas do catálogo: code:skeleton, code:search, code:read, code:outline,
+   code:symbol, db:schema, db:query (somente SELECT), db:links, docs:import, rag:search,
+   file:read, context:pack, git:run, shell:run, py:run, docker:exec, logs:tail,
+   patch:apply, test:run, verify, lint.
+2. Navegue por busca determinística (JIT), não por resumo: comece pelo esqueleto e
+   siga `code:search` -> `code:read` -> `code:symbol`. Nunca peça o repositório inteiro.
+3. Faça no máximo 6 blocos por pergunta. Não repita uma busca com o mesmo pattern;
+   se precisar de mais contexto, mude `path`, `glob` ou o pattern.
+4. Sempre cite `arquivo:linha` nas conclusões. Baseie-se apenas nos blocos recebidos.
+5. Se um resultado vier com `(truncado)` ou `truncated: true`, refine a consulta
+   (pattern mais específico, `path` menor) em vez de repetir a mesma chamada.
+6. Prefira tarefas de leitura para investigar antes de propor mudanças.
+7. Para alterar código, use patch:apply com diff unificado e verify: true.
+8. Após emitir blocos, PARE e aguarde o bloco ```crivonansky-result.
+9. Nunca invente resultados. Se o status for failure/error/denied/timeout, leia o
+   summary/details antes de tentar de novo.
+10. Conhecimento já auditado fica em `knowledge/notes`; procure ali primeiro com
+   `code:search scope=notes` antes de varrer o código bruto."""
 
 
 def handle(ctx, params):

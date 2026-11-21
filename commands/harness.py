@@ -11,15 +11,15 @@ class HarnessCommand(Command):
     name = "harness"
     description = "Executa o harness de desenvolvimento assistido"
     help_text = """Uso:
-  /harness install [--force] [--skip-docker] [--check-only] [--python CAMINHO]
-  /harness start [--no-rag] [--no-docker]
+  /harness install [--force] [--skip-docker] [--check-only] [--python CAMINHO] [--with-rag]
+  /harness start [--rag] [--no-docker]
   /harness stop [--purge]
-  /harness prepare [--full] [--no-rag]
+  /harness prepare [--full] [--sync] [--rag] [--no-docker]
   /harness preprocess [--sync] [--full] [--no-codeknow] [--no-wiki]
   /harness config
   /harness exec --clip | --file F | --stdin [--yes] [--dry-run]
   /harness run <task> [--param k=v ...] [--yes] [--dry-run]
-  /harness ask "<pergunta>" [--context rag,code,db]
+  /harness ask "<pergunta>" [--context skeleton,code,db,docs,rag]
   /harness prompt
   /harness tasks
   /harness runs [--last N]
@@ -53,6 +53,7 @@ class HarnessCommand(Command):
                     skip_docker="--skip-docker" in rest,
                     check_only="--check-only" in rest or "--check" in rest,
                     python_exe=self._install_python(rest),
+                    with_rag="--with-rag" in rest,
                 )
             )
         if sub == "config":
@@ -63,7 +64,7 @@ class HarnessCommand(Command):
         if sub == "start":
             return self._op(
                 ops.start(
-                    skip_rag="--no-rag" in rest,
+                    with_rag="--rag" in rest,
                     no_docker="--no-docker" in rest,
                     config_path_arg=config_path,
                 )
@@ -79,7 +80,9 @@ class HarnessCommand(Command):
             return self._op(
                 ops.prepare(
                     full="--full" in rest,
-                    skip_rag="--no-rag" in rest,
+                    with_rag="--rag" in rest,
+                    sync="--sync" in rest,
+                    no_docker="--no-docker" in rest,
                     config_path_arg=config_path,
                 )
             )
@@ -231,7 +234,7 @@ class HarnessCommand(Command):
         from .complements.harness.engine import HarnessEngine
         from .complements.harness.task_types import TaskContext
 
-        context = "rag,code"
+        context = "skeleton,db"
         question_parts = []
         index = 0
         while index < len(args):
@@ -256,6 +259,9 @@ class HarnessCommand(Command):
 
         parts = [f"Pergunta: {question}", ""]
 
+        if "skeleton" in context:
+            parts.extend(["## Esqueleto do projeto", "", self._skeleton_context(engine), ""])
+
         if "rag" in context:
             spec = get_task("rag:search")
             if spec is not None:
@@ -263,13 +269,26 @@ class HarnessCommand(Command):
                 parts.extend(["## Contexto do RAG", "", result.details or result.summary, ""])
 
         if "code" in context:
-            spec = get_task("code:query")
-            if spec is not None:
-                result = spec.handler(ctx, {"q": question})
-                parts.extend(["## Contexto do código", "", result.details or result.summary, ""])
+            symbol = self._identifier(question)
+            spec = get_task("code:search")
+            if spec is not None and symbol:
+                result = spec.handler(ctx, {"pattern": symbol, "max_results": 10})
+                parts.extend(["## Ocorrências no código", "", result.details, ""])
+            else:
+                parts.extend(
+                    [
+                        "## Ocorrências no código",
+                        "",
+                        "(nenhum identificador reconhecido na pergunta; use code:search)",
+                        "",
+                    ]
+                )
 
         if "db" in context:
             parts.extend(["## Contexto do banco", "", self._db_context(engine), ""])
+
+        if "docs" in context:
+            parts.extend(["## Documentação importada", "", self._docs_context(engine), ""])
 
         prompt = "\n".join(parts)
 
@@ -321,6 +340,85 @@ class HarnessCommand(Command):
         if len(text) > max_chars:
             text = text[:max_chars] + "\n\n...(contexto do banco truncado)"
         return text
+
+    def _skeleton_context(self, engine, max_chars: int = 20000) -> str:
+        """Injeta o SKELETON.md (mapa leve) no prompt."""
+        import os
+
+        path = os.path.join(engine.workspace, "knowledge", "skeleton", "SKELETON.md")
+        if not os.path.isfile(path):
+            return "(SKELETON.md não encontrado; rode `code:skeleton`)"
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except OSError as exc:  # noqa: BLE001
+            return f"(falha ao ler o esqueleto: {exc})"
+        if len(text) > max_chars:
+            text = text[:max_chars] + "\n\n...(esqueleto truncado; use code:outline)"
+        return text
+
+    def _docs_context(self, engine, max_chars: int = 4000) -> str:
+        """Lista os manuais/tickets importados (o texto vem do RAG ou do arquivo)."""
+        import json
+        import os
+
+        path = os.path.join(engine.workspace, "knowledge", "docs", "manifest.json")
+        if not os.path.isfile(path):
+            return "(documentação não importada; rode `docs:import`)"
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                manifest = json.load(fh)
+        except (OSError, ValueError) as exc:  # noqa: BLE001
+            return f"(falha ao ler o manifesto: {exc})"
+
+        items = manifest.get("files") or manifest.get("manuals") or []
+        if isinstance(items, dict):
+            items = list(items)
+        lines = [f"- `{item}`" for item in items[:40]]
+        if not lines:
+            return "(nenhum arquivo no manifesto)"
+        text = "\n".join(lines)
+        if len(text) > max_chars:
+            text = text[:max_chars] + "\n...(lista truncada)"
+        return text
+
+    def _identifier(self, question: str) -> str | None:
+        """Primeiro candidato a símbolo/tabela na pergunta (para o code:search)."""
+        import re
+
+        stop = {
+            "como",
+            "onde",
+            "qual",
+            "quais",
+            "para",
+            "pelo",
+            "pela",
+            "este",
+            "esta",
+            "isso",
+            "quando",
+            "funciona",
+            "sistema",
+            "tabela",
+            "codigo",
+            "código",
+        }
+        candidates = [
+            token
+            for token in re.findall(r"[A-Za-z_][A-Za-z0-9_]{3,}", question)
+            if token.lower() not in stop
+        ]
+        if not candidates:
+            return None
+        candidates.sort(
+            key=lambda token: (
+                "_" in token or any(char.isupper() for char in token[1:]),
+                len(token),
+            ),
+            reverse=True,
+        )
+        return candidates[0]
 
     def _hooks(self, config_path, args):
         from .complements.harness import hooks

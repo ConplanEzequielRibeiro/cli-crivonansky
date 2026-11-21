@@ -39,29 +39,35 @@
 ## Harness plugin (`/harness`)
 
 The harness is a self-contained plugin under `commands/complements/harness/`. It owns its
-own `.venv/`, `vendor/` (clones of `local-rag-system` and `codeknow`), `workspace/`
+own `.venv/`, `vendor/` (optional clone of `local-rag-system`), `workspace/`
 (`harness.yaml`, `knowledge/`, `runs/`) and `fixture/exemplo-locadora/`.
+
+Code navigation is **JIT** (`code:search`/`read`/`outline`/`symbol` over a light
+`skeleton/project.json`); source code is not vectorized. The RAG is optional and covers
+only the semantic layer (manuals, tickets, db schema and `db:links` output).
 
 | File | Responsibility |
 |---|---|
 | `commands/harness.py` | `/harness` command: parses subcommands and delegates lifecycle ops to `ops.py`; contract subcommands import the plugin lazily |
 | `commands/complements/harness/ops.py` | `install`, `start`, `stop`, `prepare`, `preprocess`, `config` |
-| `commands/complements/harness/install.ps1` | Installs the plugin: clones `vendor/`, creates venvs, installs requirements/codeknow, generates `workspace/harness.yaml` |
+| `commands/complements/harness/install.ps1` | Installs the plugin: creates the venv, installs requirements, generates `workspace/harness.yaml`; `-WithRag` also clones/installs the RAG |
 | `commands/complements/harness/bootstrap.py` | Adds the plugin `.venv` site-packages to `sys.path` when the host venv lacks PyYAML/pyperclip/sqlglot |
 | `commands/complements/harness/config.py` | Loads `harness.yaml` (precedence: `--config` → `HARNESS_CONFIG` → `workspace/harness.yaml`) and resolves relative paths |
 | `commands/complements/harness/engine.py`, `contract.py`, `policy.py`, `formatter.py`, `sinks.py`, `runs.py` | Contract execution, policy, result envelope, sinks and run history |
 | `commands/complements/harness/task_types.py` | `TaskResult`/`TaskContext`/`TaskSpec` (nunca nomear de `types.py`) |
 | `commands/complements/harness/progress.py` | Progresso ao vivo das tarefas longas (sink da TUI, stderr, log) |
-| `commands/complements/harness/tasks/` | Task catalog (`db:*`, `code:*`, `rag:*`, `docs:import`, `git:run`, `shell:run`, `docker:exec`, etc.) |
+| `commands/complements/harness/filters.py` | Recorte compartilhado de diretórios/arquivos do repositório legado |
+| `commands/complements/harness/astsym.py` | Símbolos (ast-grep + fallback regex/chaves) para o esqueleto e o `db:links` |
+| `commands/complements/harness/tasks/` | Task catalog (`code:*`, `db:*`, `rag:*`, `docs:import`, `git:run`, `shell:run`, `docker:exec`, etc.) |
 
 Lifecycle subcommands:
 
 ```text
-/harness install [--force] [--skip-docker] [--check-only]
-/harness start [--no-rag] [--no-docker]
+/harness install [--force] [--skip-docker] [--check-only] [--with-rag]
+/harness start [--rag] [--no-docker]
 /harness stop [--purge]
-/harness prepare [--full] [--no-rag]
-/harness preprocess [--sync] [--full] [--no-codeknow] [--no-wiki]
+/harness prepare [--full] [--sync] [--rag] [--no-docker]
+/harness preprocess [--sync] [--full] [--no-codeknow] [--no-wiki]   # alias de code:skeleton
 /harness config
 ```
 
@@ -77,8 +83,12 @@ Contract subcommands:
 
 Notes:
 
-- `start --no-docker` skips the fixture entirely and starts only the RAG API; with
-  `--no-rag` as well it is a no-op that returns `nada a iniciar`.
+- `start --no-docker` skips the fixture entirely; with `--rag` it starts only the RAG
+  API, and without it is a no-op that returns `nada a iniciar`.
+- `prepare` runs `db:snapshot` → `code:skeleton` → `db:links` → `docs:import`, plus
+  `rag:sync` only with `--sync`/`--rag`. The skeleton must run before `db:links` so the
+  `symbol` field of the links can be resolved.
+- The RAG is optional (`install --with-rag`); `code:*` tasks never depend on it.
 - `commands/harness.py` must remain importable **without** PyYAML/sqlglot so that
   `/harness install` works on a bare host venv. Keep heavy imports inside methods.
 - Do not add harness runtime deps (PyYAML, pyperclip, sqlglot) to the root

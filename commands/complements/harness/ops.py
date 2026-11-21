@@ -4,10 +4,10 @@ Concentra instalação, subida/derrubada da fixture, preparação da base de
 conhecimento e pré-processamento. Tudo fica dentro de
 ``commands/complements/harness``:
 
-* ``.venv``        — dependências Python do plugin + codeknow
-* ``vendor``       — clones de local-rag-system e codeknow
-* ``workspace``    — harness.yaml, knowledge/ e runs/
-* ``fixture``      — exemplo-locadora (RotaCar)
+* ``.venv``        - dependências Python do plugin
+* ``vendor``       - local-rag-system (opcional, com ``-WithRag``)
+* ``workspace``    - harness.yaml, knowledge/ e runs/
+* ``fixture``      - exemplo-locadora (RotaCar)
 
 O módulo usa apenas a stdlib no import, para que ``/harness install`` funcione
 mesmo antes de as dependências do plugin existirem.
@@ -92,7 +92,7 @@ def _add_tools_info(info: dict, config_path_arg: str | None = None) -> None:
 
     for label, keys in (
         ("python", ("python",)),
-        ("codeknow", ("codeknow",)),
+        ("rg", ("rg",)),
         ("rag_path", ("rag", "path")),
         ("rag_python", ("rag", "python")),
     ):
@@ -175,6 +175,7 @@ def install(
     skip_docker: bool = False,
     check_only: bool = False,
     python_exe: str | None = None,
+    with_rag: bool = False,
 ) -> TaskResult:
     script = PLUGIN_ROOT / "install.ps1"
     if not script.is_file():
@@ -189,6 +190,8 @@ def install(
         args.append("-CheckOnly")
     if python_exe:
         args.extend(["-PythonExe", str(python_exe)])
+    if with_rag:
+        args.append("-WithRag")
 
     # O install.ps1 pode demorar (clones + pip); o log fica no workspace e as
     # linhas são publicadas em tempo real (stderr na CLI, RichLog na TUI).
@@ -229,9 +232,6 @@ def install(
     else:
         progress.finish("plugin instalado" if ok else "falha na instalação")
         summary = "plugin instalado" if ok else "falha na instalação do plugin"
-        codeknow = PLUGIN_ROOT / ".venv" / "Scripts" / "codeknow.exe"
-        if ok and not codeknow.is_file():
-            summary += " (codeknow indisponível: code:index/code:query desativados)"
 
     return TaskResult(
         ok,
@@ -245,7 +245,7 @@ def install(
 # start / stop
 # ---------------------------------------------------------------------------
 def start(
-    skip_rag: bool = False,
+    with_rag: bool = False,
     no_docker: bool = False,
     config_path_arg: str | None = None,
 ) -> TaskResult:
@@ -287,7 +287,7 @@ def start(
         details.append(getattr(started, "combined", ""))
 
     rag_started = False
-    if not skip_rag:
+    if with_rag:
         rag = _run_task(config, "rag:serve", {"action": "start"})
         details.append(rag.summary)
         if not rag.success:
@@ -304,10 +304,10 @@ def start(
             )
         rag_started = True
     elif not no_docker:
-        details.append("RAG ignorado (--no-rag)")
+        details.append("RAG opcional não iniciado (use --rag para subir a API)")
 
     if not fixture_started and not rag_started:
-        summary = "nada a iniciar (--no-docker e --no-rag)"
+        summary = "nada a iniciar (--no-docker sem --rag)"
     elif not fixture_started:
         summary = "API do RAG no ar (fixture não iniciada)"
     elif not rag_started:
@@ -364,23 +364,28 @@ def stop(purge: bool = False, config_path_arg: str | None = None) -> TaskResult:
 # ---------------------------------------------------------------------------
 def prepare(
     full: bool = False,
-    skip_rag: bool = False,
+    with_rag: bool = False,
+    sync: bool = False,
+    no_docker: bool = False,
     config_path_arg: str | None = None,
 ) -> TaskResult:
-    started = start(skip_rag=skip_rag, config_path_arg=config_path_arg)
+    started = start(with_rag=with_rag, no_docker=no_docker, config_path_arg=config_path_arg)
     if not started.success:
         return started
 
     config = ensure_config(config_path_arg)
     _set_db_env(config)
 
+    # O esqueleto vem antes do db:links: é ele que resolve o símbolo
+    # (função/método) de cada ocorrência de SQL.
     tasks = [
         ("db:snapshot", {}),
+        ("code:skeleton", {"full": full}),
         ("db:links", {}),
         ("docs:import", {}),
-        ("code:preprocess", {}),
-        ("rag:sync", {"full": True} if full else {}),
     ]
+    if sync or with_rag:
+        tasks.append(("rag:sync", {"full": True} if full else {}))
 
     details = [started.summary]
     progress = Progress("prepare", log_path=str(PLUGIN_ROOT / "workspace" / "prepare.log"))
@@ -412,20 +417,20 @@ def preprocess(
     no_wiki: bool = False,
     config_path_arg: str | None = None,
 ) -> TaskResult:
+    """Compatibilidade: ``preprocess`` agora gera o esqueleto do código.
+
+    ``no_codeknow``/``no_wiki`` são aceitos e ignorados (não existe mais grafo
+    ou wiki). ``--sync`` encadeia o ``rag:sync``.
+    """
     config = ensure_config(config_path_arg)
     _set_db_env(config)
 
-    params = {
-        "force": full,
-        "no_codeknow": no_codeknow,
-        "no_wiki": no_wiki,
-    }
-    result = _run_task(config, "code:preprocess", params)
+    result = _run_task(config, "code:skeleton", {"full": full})
     details = [result.summary]
     if not result.success:
         return TaskResult(
             False,
-            "pré-processamento falhou",
+            "esqueleto do código falhou",
             details="\n".join(details),
             exit_code=result.exit_code,
             status=result.status,
@@ -437,13 +442,13 @@ def preprocess(
         if not synced.success:
             return TaskResult(
                 False,
-                "código pré-processado, mas o rag:sync falhou",
+                "esqueleto gerado, mas o rag:sync falhou",
                 details="\n".join(details),
                 exit_code=synced.exit_code,
                 status=synced.status,
             )
 
-    return TaskResult(True, "pré-processamento concluído", details="\n".join(details))
+    return TaskResult(True, "esqueleto do código atualizado", details="\n".join(details))
 
 
 def _docker_available() -> bool:

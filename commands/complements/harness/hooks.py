@@ -56,7 +56,7 @@ def _build_script(
 
 def _settings(config: dict) -> tuple[list[str], str, str]:
     hooks_cfg = config.get("hooks") or {}
-    tasks = hooks_cfg.get("tasks") or ["rag:sync"]
+    tasks = hooks_cfg.get("tasks") or ["code:skeleton"]
     log = hooks_cfg.get("log") or os.path.join(get_workspace(config), "runs", "hooks.log")
     if not os.path.isabs(log):
         log = os.path.join(get_workspace(config), log)

@@ -43,7 +43,7 @@ def _context(tmp_path):
     )
 
 
-def test_rag_sync_publishes_preprocessed_code(tmp_path, monkeypatch):
+def test_rag_sync_publishes_semantic_layer_only(tmp_path, monkeypatch):
     ctx = _context(tmp_path)
     commands = []
 
@@ -56,23 +56,19 @@ def test_rag_sync_publishes_preprocessed_code(tmp_path, monkeypatch):
     result = rag.handle_sync(ctx, {})
 
     assert result.success
-    raw = tmp_path / "rag" / "data" / "raw" / "tech" / "_harness" / "code"
-    assert (raw / "src" / "cadastro" / "cliente.php").is_file()
-    assert (raw / "src" / "app.js").is_file()
-    assert (raw / "CODE_GRAPH_REPORT.md").is_file()
-    assert (raw / "wiki" / "index.md").is_file()
+    raw = tmp_path / "rag" / "data" / "raw" / "tech" / "_harness"
+    # Código-fonte não vai mais para o índice: navegação em código é JIT.
+    assert not (raw / "code").exists()
     assert commands == [["rag-python", "main.py", "ingest"]]
 
-    links_raw = (
-        tmp_path / "rag" / "data" / "raw" / "tech" / "_harness" / "links"
-    )
+    links_raw = raw / "links"
     assert (links_raw / "code-db-links.md").is_file()
     assert (links_raw / "fk-inferred.md").is_file()
     assert (links_raw / "includes.md").is_file()
     assert (links_raw / "tables" / "tb_x.md").is_file()
 
 
-def test_rag_sync_removes_stale_published_code(tmp_path, monkeypatch):
+def test_rag_sync_leaves_legacy_code_index_untouched(tmp_path, monkeypatch):
     ctx = _context(tmp_path)
     stale = (
         tmp_path
@@ -92,7 +88,8 @@ def test_rag_sync_removes_stale_published_code(tmp_path, monkeypatch):
 
     rag.handle_sync(ctx, {})
 
-    assert not stale.exists()
+    # O índice antigo de código fica intocado; só a camada semântica é publicada.
+    assert stale.exists()
 
 
 def test_rag_sync_removes_stale_published_links(tmp_path, monkeypatch):

@@ -3,24 +3,24 @@
   Instala o plugin harness dentro de commands\complements\harness.
 
 .DESCRIPTION
-  Verifica Python 3.13+, Git e Docker; clona/atualiza as dependências externas
-  em <plugin>\vendor; cria o venv do plugin com os requirements e o codeknow;
-  cria o venv do RAG; e gera <plugin>\workspace\harness.yaml a partir de
+  Verifica Python 3.10+, Git e Docker; cria o venv do plugin com os
+  requirements; e gera <plugin>\workspace\harness.yaml a partir de
   harness.example.yaml.
 
+  Com -WithRag, tambem clona/atualiza o local-rag-system em <plugin>\vendor e
+  cria o venv dele (camada semantica opcional: manuais, tickets, schema).
+
   Tudo fica dentro do plugin:
-    .venv\      dependências Python do plugin + codeknow (editável)
-    vendor\     local-rag-system + codeknow (gitignored)
+    .venv\      dependencias Python do plugin
+    vendor\     local-rag-system (gitignored, so com -WithRag)
     workspace\  harness.yaml, knowledge\ e runs\ (gitignored)
     fixture\    exemplo-locadora (versionada)
 
   O instalador é idempotente: se uma etapa falhar no meio (clone interrompido,
   venv pela metade, arquivo travado pelo antivírus), rode de novo — o estado
-  parcial é detectado e refeito. As etapas que tocam o disco têm retry.
+  parcial é detectado e refeito.
 
-  A escolha do Python considera o compilador C++: com Visual Studio Build Tools
-  usa a versão mais nova (hoje 3.15, compilando tree-sitter/zstandard do fonte);
-  sem compilador usa a mais nova com wheels prontas (hoje 3.14).
+  O Python do core é 3.10+; o RAG (opcional) exige 3.13+.
 
 .PARAMETER CheckOnly
   Apenas verifica as dependências e o estado dos diretórios, sem instalar.
@@ -32,12 +32,16 @@
   Sobrescreve workspace\harness.yaml mesmo se ele já existir.
 
 .PARAMETER PythonExe
-  Caminho explícito do python.exe (3.13+). Também aceito via HARNESS_PYTHON.
+  Caminho explícito do python.exe (3.10+). Também aceito via HARNESS_PYTHON.
   Use quando a detecção automática não encontrar o interpretador.
+
+.PARAMETER WithRag
+  Instala tambem o local-rag-system e o venv dele (camada semantica opcional).
 
 .EXAMPLE
   powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1
   powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -CheckOnly
+  powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -WithRag
   powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -PythonExe C:\Python313\python.exe
 #>
 [CmdletBinding()]
@@ -45,6 +49,7 @@ param(
     [switch]$CheckOnly,
     [switch]$SkipDocker,
     [switch]$ForceConfig,
+    [switch]$WithRag,
     [string]$PythonExe = ""
 )
 
@@ -59,18 +64,18 @@ $fixtureRoot = Join-Path $pluginRoot "fixture\exemplo-locadora"
 $requirements = Join-Path $pluginRoot "requirements.txt"
 $writeConfig = Join-Path $pluginRoot "scripts\write_config.py"
 
-# Versão mínima exigida (o RAG usa recursos de 3.13+).
-$minimumPython = [version]"3.13"
-# Última versão em que todas as dependências (torch, tree-sitter, zstandard,
-# pyyaml) têm wheel binária no PyPI; acima dela alguns pacotes são compilados
-# do fonte e exigem Visual Studio Build Tools (C++).
+# Versao minima do core (sem o RAG).
+$minimumPython = [version]"3.10"
+# O RAG (opcional, -WithRag) exige 3.13+.
+$ragMinimumPython = [version]"3.13"
+# Ultima versao em que todas as dependencias do RAG tem wheel binaria no PyPI.
 $lastWheelPython = [version]"3.14"
 
-# Dependências externas clonadas dentro do plugin.
-$projects = @(
-    @{ Name = "local-rag-system"; Remote = "https://github.com/ezequielrribeiro/local-rag-system.git"; Kind = "rag" },
-    @{ Name = "codeknow"; Remote = "https://github.com/asalsali/codeknow.git"; Kind = "codeknow" }
-)
+# Dependencias externas clonadas dentro do plugin (RAG so com -WithRag).
+$projects = @()
+if ($WithRag) {
+    $projects += @{ Name = "local-rag-system"; Remote = "https://github.com/ezequielrribeiro/local-rag-system.git" }
+}
 
 # ---------------------------------------------------------------------------
 # Helpers de saída
@@ -588,7 +593,7 @@ else {
     Write-Ok "$pyVer ($($script:Python.Path)) - origem: $($script:Python.Source)"
     if ([version]$script:Python.Version -gt $lastWheelPython) {
         Write-Warn "Python $($script:Python.Version) e mais novo que $lastWheelPython."
-        Write-Warn "tree-sitter e zstandard serao compilados do fonte (requer Build Tools C++)."
+        Write-Warn "O RAG (opcional) pode precisar de Build Tools C++ para compilar zstandard."
     }
 }
 
@@ -614,7 +619,7 @@ if ($missing.Count -gt 0) {
     if ($missing -contains "Git") { Write-Host "  Git: https://git-scm.com/download/win" }
     if ($missing -contains "Docker Desktop") { Write-Host "  Docker: https://www.docker.com/products/docker-desktop/" }
     if ($missing -match "Python") {
-        Write-Host "  Python 3.13: https://www.python.org/downloads/"
+        Write-Host "  Python 3.10+ (3.13+ para o RAG): https://www.python.org/downloads/"
         Write-Host "  Se o Python ja esta instalado, informe o caminho: -PythonExe C:\caminho\python.exe"
         Write-Host "  (ou defina a variavel de ambiente HARNESS_PYTHON)"
     }
@@ -649,7 +654,7 @@ foreach ($project in $projects) {
 }
 
 # ---------------------------------------------------------------------------
-# 3. Venv do plugin (requirements + codeknow editavel)
+# 3. Venv do plugin (requirements)
 # ---------------------------------------------------------------------------
 Write-Step "Instalando o venv do plugin"
 
@@ -658,42 +663,33 @@ Upgrade-Pip $pluginPip
 Write-Host "    instalando requirements do plugin ..."
 Install-Pip $pluginPip @("-r", $requirements)
 
-$script:CodeknowOk = $false
-$codeknowDir = Join-Path $vendorRoot "codeknow"
-if (Test-Path (Join-Path $codeknowDir "pyproject.toml")) {
-    Write-Host "    instalando codeknow (editavel) no venv do plugin ..."
-    try {
-        Install-Pip $pluginPip @("-e", $codeknowDir)
-        $script:CodeknowOk = $true
-        Write-Ok "codeknow instalado"
+if ($WithRag) {
+    # -----------------------------------------------------------------------
+    # 4. Venv do RAG (opcional)
+    # -----------------------------------------------------------------------
+    Write-Step "Instalando o RAG (opcional)"
+
+    $ragDir = Join-Path $vendorRoot "local-rag-system"
+    if (Test-Path (Join-Path $ragDir "requirements.txt")) {
+        if ([version]$script:Python.Version -lt $ragMinimumPython) {
+            Write-Warn "O RAG exige Python $ragMinimumPython+; o Python atual e $($script:Python.Version)."
+            Write-Warn "O core continua funcionando; use -PythonExe para habilitar o RAG."
+        }
+        else {
+            $ragPip = Ensure-Venv $ragDir
+            Upgrade-Pip $ragPip
+            Write-Host "    instalando requirements do RAG (pode demorar varios minutos) ..."
+            Install-Pip $ragPip @("-r", (Join-Path $ragDir "requirements.txt"))
+            Install-Pip $ragPip @("scikit-learn", "requests", "pytest", "httpx")
+        }
     }
-    catch {
-        # codeknow (tree-sitter) pode precisar de compilador C++ no Python mais
-        # novo. O resto do harness (db:links, docs, rag) funciona sem ele.
-        Write-Warn "codeknow nao instalou: $($_.Exception.Message)"
-        Write-Warn "code:index/code:query ficam indisponiveis; o restante funciona."
-        Write-Warn "Use -PythonExe com o Python $lastWheelPython (wheels prontas) ou instale Build Tools C++."
+    else {
+        Write-Warn "local-rag-system nao encontrado em vendor"
     }
 }
 else {
-    Write-Warn "codeknow nao encontrado em vendor; code:index ficara indisponivel"
-}
-
-# ---------------------------------------------------------------------------
-# 4. Venv do RAG
-# ---------------------------------------------------------------------------
-Write-Step "Instalando o RAG"
-
-$ragDir = Join-Path $vendorRoot "local-rag-system"
-if (Test-Path (Join-Path $ragDir "requirements.txt")) {
-    $ragPip = Ensure-Venv $ragDir
-    Upgrade-Pip $ragPip
-    Write-Host "    instalando requirements do RAG (pode demorar varios minutos) ..."
-    Install-Pip $ragPip @("-r", (Join-Path $ragDir "requirements.txt"))
-    Install-Pip $ragPip @("scikit-learn", "requests", "pytest", "httpx")
-}
-else {
-    Write-Warn "local-rag-system nao encontrado em vendor"
+    Write-Host ""
+    Write-Host "    RAG opcional nao instalado (use -WithRag para habilitar a busca semantica)." -ForegroundColor DarkGray
 }
 
 # ---------------------------------------------------------------------------
@@ -719,10 +715,6 @@ Write-Step "Instalacao concluida"
 $total = (Get-Date) - $script:StartedAt
 Write-Host ""
 Write-Host ("Tudo dentro de: {0} (em {1:hh\:mm\:ss})" -f $pluginRoot, $total) -ForegroundColor Cyan
-if (-not $script:CodeknowOk) {
-    Write-Warn "codeknow indisponivel: code:index/code:query nao vao funcionar."
-    Write-Warn "O restante do harness (db:links, docs:import, rag:sync) esta pronto."
-}
 Write-Host "Proximos passos:" -ForegroundColor Cyan
 Write-Host "  1. Suba o ambiente:  python crivonansky.py harness start"
 Write-Host "  2. Prepare a base:   python crivonansky.py harness prepare"

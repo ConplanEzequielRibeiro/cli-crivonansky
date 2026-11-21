@@ -1,7 +1,7 @@
 """Tarefa db:links — extrai SQL embutido em PHP/JS e vínculos com tabelas.
 
 Além do extrator, a tarefa resolve o símbolo (função/método) que contém cada
-ocorrência usando o grafo do codeknow e gera visões em Markdown para o RAG:
+ocorrência a partir do esqueleto (`code:skeleton`) e gera visões em Markdown:
 
 * ``code-db-links.json`` — vínculos código ↔ tabela;
 * ``fk-inferred.json`` — FKs sugeridas a partir de JOINs e convenções de nome;
@@ -9,7 +9,6 @@ ocorrência usando o grafo do codeknow e gera visões em Markdown para o RAG:
 * ``code-db-links.md``, ``fk-inferred.md``, ``includes.md`` e ``tables/<tabela>.md``.
 """
 
-import ast
 import json
 import os
 import re
@@ -21,39 +20,16 @@ import sqlglot
 from sqlglot import exp
 
 from ..catalog import register
+from ..filters import iter_files
 from ..progress import for_context, format_duration
 from ..task_types import TaskResult, TaskSpec
 from ..util import as_int, legacy_repo, read_text, workspace, write_json, write_text
 
-SKIP_DIRS = {
-    ".git",
-    ".hg",
-    ".svn",
-    "vendor",
-    "node_modules",
-    ".venv",
-    "venv",
-    "site-packages",
-    "__pycache__",
-    "dist",
-    "build",
-    ".next",
-    "coverage",
-}
-
 EXTENSIONS = {".php", ".js", ".ts", ".jsx", ".tsx"}
-
-# Bundles/minificados não têm SQL escrito à mão; ignorá-los evita gastar
-# minutos de regex e parsing em um único arquivo gerado.
-ARTIFACT_RE = re.compile(r"\.(?:min|bundle|pack)\.js$", re.I)
 
 # Acima disso o sqlglot pode demorar demais em uma única instrução; nesse caso
 # caímos na análise heurística (que continua extraindo as tabelas).
 MAX_SQL_CHARS = 32000
-
-# Arquivos maiores que isso não entram na resolução de símbolos (o grafo do
-# codeknow já os indexa; aqui só precisamos mapear linha → função).
-MAX_SYMBOL_FILE_BYTES = 2 * 1024 * 1024
 
 STRING_RE = re.compile(r"""(['"])((?:\\.|(?!\1).)*)\1""", re.S)
 SQL_KEYWORDS = re.compile(r"\b(SELECT|INSERT\s+INTO|UPDATE|DELETE|REPLACE\s+INTO)\b", re.I)
@@ -90,27 +66,7 @@ _TABLE_REF_RE = re.compile(
 # ---------------------------------------------------------------------------
 def _iter_files(root: str, skipped: dict | None = None, max_bytes: int = 0):
     """Percorre as fontes analisáveis, acumulando estatísticas em ``skipped``."""
-    skipped = skipped if skipped is not None else {}
-
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(d for d in dirnames if d.lower() not in SKIP_DIRS)
-        for filename in sorted(filenames):
-            extension = os.path.splitext(filename)[1].lower()
-            if extension not in EXTENSIONS:
-                continue
-            if ARTIFACT_RE.search(filename):
-                skipped["build_artifacts"] = skipped.get("build_artifacts", 0) + 1
-                continue
-
-            path = os.path.join(dirpath, filename)
-            if max_bytes:
-                try:
-                    if os.path.getsize(path) > max_bytes:
-                        skipped["large_files"] = skipped.get("large_files", 0) + 1
-                        continue
-                except OSError:
-                    continue
-            yield path
+    yield from iter_files(root, EXTENSIONS, max_bytes=max_bytes, skipped=skipped)
 
 
 class LineIndex:
@@ -452,181 +408,38 @@ def _fk(table: str, column: str, ref_table: str, ref_column: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Símbolos (função/método) via grafo do codeknow
+# Símbolos (função/método) via esqueleto do código
 # ---------------------------------------------------------------------------
-def _graph_path(ctx) -> str | None:
-    base = os.path.join(workspace(ctx), "knowledge", "code")
-    for candidate in (
-        os.path.join(base, "codegraph-out", "graph.json"),
-        os.path.join(base, "graph.json"),
-    ):
-        if os.path.isfile(candidate):
-            return candidate
-    return None
-
-
-def _brace_block_end(
-    text: str, start_line: int, line_starts: list[int] | None = None
-) -> int | None:
-    if start_line < 1:
-        return None
-
-    if line_starts is not None:
-        if start_line > len(line_starts):
-            return None
-        offset = line_starts[start_line - 1]
-    else:
-        offset = 0
-        for _ in range(start_line - 1):
-            newline = text.find("\n", offset)
-            if newline == -1:
-                return None
-            offset = newline + 1
-
-    state = "code"
-    depth = 0
-    opened = False
-    line_no = start_line
-    index = offset
-
-    while index < len(text):
-        char = text[index]
-        nxt = text[index + 1] if index + 1 < len(text) else ""
-
-        if state == "code":
-            if char == "'":
-                state = "single"
-            elif char == '"':
-                state = "double"
-            elif char == "/" and nxt == "/":
-                state = "line_comment"
-                index += 1
-            elif char == "#":
-                state = "line_comment"
-            elif char == "/" and nxt == "*":
-                state = "block_comment"
-                index += 1
-            elif char == "{":
-                depth += 1
-                opened = True
-            elif char == "}":
-                if opened:
-                    depth -= 1
-                    if depth == 0:
-                        return line_no
-            elif char == "\n":
-                line_no += 1
-        elif state in ("single", "double"):
-            quote = "'" if state == "single" else '"'
-            if char == "\\":
-                index += 1
-            elif char == quote:
-                state = "code"
-            elif char == "\n":
-                line_no += 1
-        elif state == "line_comment":
-            if char == "\n":
-                state = "code"
-                line_no += 1
-        elif state == "block_comment":
-            if char == "*" and nxt == "/":
-                state = "code"
-                index += 1
-            elif char == "\n":
-                line_no += 1
-
-        index += 1
-
-    return None
-
-
-def _python_block_end(text: str, start_line: int, tree=None) -> int | None:
-    if tree is None:
-        try:
-            tree = ast.parse(text)
-        except SyntaxError:
-            return None
-
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            if node.lineno == start_line:
-                return getattr(node, "end_lineno", None)
-    return None
-
-
-def _block_end(
-    rel: str,
-    start: int,
-    text: str | None,
-    line_starts: list[int] | None = None,
-    tree=None,
-) -> int | None:
-    if text is None:
-        return None
-    if rel.lower().endswith(".py"):
-        return _python_block_end(text, start, tree)
-    return _brace_block_end(text, start, line_starts)
-
-
 def _load_symbols(ctx, repo: str) -> dict[str, list[tuple[int, int, str]]]:
-    graph_file = _graph_path(ctx)
-    if not graph_file:
+    """Intervalos de linha por arquivo, lidos de ``skeleton/project.json``.
+
+    O ``code:skeleton`` roda antes do ``db:links`` no ``prepare``. Sem o
+    esqueleto o campo ``symbol`` fica vazio — os vínculos código ↔ tabela em si
+    não dependem dele.
+    """
+    path = os.path.join(workspace(ctx), "knowledge", "skeleton", "project.json")
+    if not os.path.isfile(path):
         return {}
 
     try:
-        with open(graph_file, "r", encoding="utf-8") as fh:
-            graph = json.load(fh)
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
     except (OSError, ValueError):
         return {}
 
-    nodes = graph.get("nodes") if isinstance(graph, dict) else None
-    if not isinstance(nodes, list):
-        return {}
-
-    sources: dict[str, str | None] = {}
-    line_starts: dict[str, list[int]] = {}
-    trees: dict[str, object] = {}
     ranges: dict[str, list[tuple[int, int, str]]] = {}
-
-    for node in nodes:
-        if not isinstance(node, dict) or not node.get("_callable"):
-            continue
-
-        rel = str(node.get("source_file") or "").replace("\\", "/")
-        label = node.get("label") or node.get("norm_label")
-        if not rel or not label:
-            continue
-
-        numbers = [int(value) for value in re.findall(r"\d+", str(node.get("source_location") or ""))]
-        if not numbers:
-            continue
-        start = numbers[0]
-
-        if rel not in sources:
-            path = os.path.join(repo, rel)
+    for relative_path, entry in (data.get("files_index") or {}).items():
+        for symbol in entry.get("symbols") or []:
             try:
-                if os.path.getsize(path) > MAX_SYMBOL_FILE_BYTES:
-                    sources[rel] = None
-                else:
-                    sources[rel] = read_text(path)
-            except OSError:
-                sources[rel] = None
-            if sources[rel] is not None:
-                line_starts[rel] = LineIndex(sources[rel]).starts
-                if rel.lower().endswith(".py"):
-                    try:
-                        trees[rel] = ast.parse(sources[rel])
-                    except SyntaxError:
-                        trees[rel] = None
-
-        end = _block_end(
-            rel,
-            start,
-            sources[rel],
-            line_starts.get(rel),
-            trees.get(rel),
-        )
-        ranges.setdefault(rel, []).append((start, end or start, str(label)))
+                start = int(symbol.get("line"))
+                end = int(symbol.get("end") or start)
+            except (TypeError, ValueError):
+                continue
+            label = str(symbol.get("name") or "")
+            if not label:
+                continue
+            key = str(relative_path).replace("\\", "/")
+            ranges.setdefault(key, []).append((start, end, label))
 
     for items in ranges.values():
         items.sort(key=lambda item: item[0])

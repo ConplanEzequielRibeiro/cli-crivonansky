@@ -108,6 +108,68 @@ def test_install_reports_missing_installer(tmp_path, monkeypatch):
     assert "instalador não encontrado" in result.summary
 
 
+def test_install_forwards_with_rag(tmp_path, monkeypatch):
+    plugin = tmp_path / "harness"
+    plugin.mkdir()
+    (plugin / "install.ps1").write_text("# fake\n", encoding="utf-8")
+
+    calls = {}
+
+    def fake_run(cmd, cwd=None, timeout=60, shell=False, env=None, stream=None):
+        calls["cmd"] = cmd
+        return ProcessResult(0, "ok", "")
+
+    monkeypatch.setattr(ops, "PLUGIN_ROOT", plugin)
+    monkeypatch.setattr(ops, "run_process", fake_run)
+    monkeypatch.setattr(
+        ops,
+        "write_default_config",
+        lambda root, force=False: Path(root) / "workspace" / "harness.yaml",
+    )
+
+    result = ops.install(with_rag=True)
+
+    assert result.success is True
+    assert "-WithRag" in calls["cmd"]
+
+
+def test_prepare_indexes_skeleton_before_links(monkeypatch):
+    tasks = []
+
+    monkeypatch.setattr(ops, "start", lambda **kwargs: TaskResult(True, "start ok"))
+    monkeypatch.setattr(ops, "ensure_config", lambda *args, **kwargs: "cfg")
+    monkeypatch.setattr(ops, "_set_db_env", lambda *args, **kwargs: None)
+
+    def fake_task(config, task, params=None):
+        tasks.append(task)
+        return TaskResult(True, f"{task} ok")
+
+    monkeypatch.setattr(ops, "_run_task", fake_task)
+
+    result = ops.prepare()
+
+    assert result.success is True
+    assert tasks == ["db:snapshot", "code:skeleton", "db:links", "docs:import"]
+
+
+def test_prepare_runs_rag_sync_only_when_asked(monkeypatch):
+    tasks = []
+
+    monkeypatch.setattr(ops, "start", lambda **kwargs: TaskResult(True, "start ok"))
+    monkeypatch.setattr(ops, "ensure_config", lambda *args, **kwargs: "cfg")
+    monkeypatch.setattr(ops, "_set_db_env", lambda *args, **kwargs: None)
+
+    def fake_task(config, task, params=None):
+        tasks.append(task)
+        return TaskResult(True, f"{task} ok")
+
+    monkeypatch.setattr(ops, "_run_task", fake_task)
+
+    ops.prepare(sync=True)
+
+    assert tasks == ["db:snapshot", "code:skeleton", "db:links", "docs:import", "rag:sync"]
+
+
 def _stub_start(monkeypatch, rag_result=None):
     calls = {"docker": 0, "powershell": 0, "tasks": []}
 
@@ -135,7 +197,7 @@ def _stub_start(monkeypatch, rag_result=None):
 def test_start_no_docker_skips_fixture(monkeypatch):
     calls = _stub_start(monkeypatch)
 
-    result = ops.start(no_docker=True)
+    result = ops.start(no_docker=True, with_rag=True)
 
     assert result.success is True
     assert calls["docker"] == 0
@@ -144,10 +206,10 @@ def test_start_no_docker_skips_fixture(monkeypatch):
     assert "fixture não iniciada" in result.summary
 
 
-def test_start_no_docker_and_no_rag_is_noop(monkeypatch):
+def test_start_no_docker_without_rag_is_noop(monkeypatch):
     calls = _stub_start(monkeypatch)
 
-    result = ops.start(no_docker=True, skip_rag=True)
+    result = ops.start(no_docker=True)
 
     assert result.success is True
     assert calls["docker"] == 0
@@ -159,7 +221,7 @@ def test_start_no_docker_and_no_rag_is_noop(monkeypatch):
 def test_start_no_docker_reports_rag_failure(monkeypatch):
     _stub_start(monkeypatch, rag_result=TaskResult(False, "rag falhou", exit_code=1))
 
-    result = ops.start(no_docker=True)
+    result = ops.start(no_docker=True, with_rag=True)
 
     assert result.success is False
     assert result.summary == "API do RAG não iniciou"
@@ -168,10 +230,21 @@ def test_start_no_docker_reports_rag_failure(monkeypatch):
 def test_start_without_no_docker_starts_fixture(monkeypatch):
     calls = _stub_start(monkeypatch)
 
-    result = ops.start()
+    result = ops.start(with_rag=True)
 
     assert result.success is True
     assert calls["docker"] == 1
     assert calls["powershell"] == 1
     assert calls["tasks"] == [("rag:serve", {"action": "start"})]
     assert result.summary == "ambiente do harness no ar"
+
+
+def test_start_does_not_touch_rag_by_default(monkeypatch):
+    calls = _stub_start(monkeypatch)
+
+    result = ops.start()
+
+    assert result.success is True
+    assert calls["docker"] == 1
+    assert calls["tasks"] == []
+    assert result.summary == "fixture no ar (RAG não iniciado)"

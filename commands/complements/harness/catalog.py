@@ -24,21 +24,21 @@ def load_tasks() -> None:
         return
 
     from .tasks import (  # noqa: F401
-        code,
         db,
         docker,
         docs,
         env,
         file,
         git,
+        jit,
         links,
         patch,
         pipelines,
-        preprocess,
         prompt,
         rag,
         rag_serve,
         shell,
+        skeleton,
     )
 
     _loaded = True

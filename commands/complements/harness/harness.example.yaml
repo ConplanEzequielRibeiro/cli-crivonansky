@@ -17,14 +17,16 @@ legacy:
   schema_dump: "{{PLUGIN_ROOT}}/fixture/exemplo-locadora/banco/dump-estrutura.sql"
 
 tools:
-  # Venv do próprio plugin (deps + codeknow instalado editável).
-  codeknow: "{{PLUGIN_ROOT}}/.venv/Scripts/codeknow.exe"
+  # Venv do próprio plugin (deps do harness).
   python: "{{PLUGIN_ROOT}}/.venv/Scripts/python.exe"
-  rag:
-    # Repositório clonado pelo install.ps1 dentro do plugin.
-    path: "{{PLUGIN_ROOT}}/vendor/local-rag-system"
-    python: "{{PLUGIN_ROOT}}/vendor/local-rag-system/.venv/Scripts/python.exe"
-    api: http://127.0.0.1:8000
+  # ripgrep usado por code:search/code:symbol (padrão: `rg` do PATH).
+  rg: rg
+  # RAG opcional (camada semântica: manuais, tickets, schema/vínculos).
+  # Só preencha depois de `harness install --with-rag`.
+  # rag:
+  #   path: "{{PLUGIN_ROOT}}/vendor/local-rag-system"
+  #   python: "{{PLUGIN_ROOT}}/vendor/local-rag-system/.venv/Scripts/python.exe"
+  #   api: http://127.0.0.1:8000
 
 output:
   default_sinks: [stdout, clipboard]
@@ -32,9 +34,11 @@ output:
     clipboard: 12000
   max_blocks_per_message: 5
   max_loop_iterations: 3
+  # Limite de saltos (busca -> leitura -> símbolo) por pergunta.
+  max_hops: 6
 
 hooks:
-  tasks: ["rag:sync"]
+  tasks: ["code:skeleton"]
   log: runs/hooks.log
 
 policy:

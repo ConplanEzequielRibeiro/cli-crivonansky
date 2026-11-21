@@ -53,7 +53,15 @@ def handle(ctx, params):
         ok_all = ok_all and ok
 
     add(*_check_command("git", ["git", "--version"], timeout=10))
-    add(*_check_command("docker", ["docker", "info"], timeout=15))
+
+    docker_line, docker_ok = _check_command("docker", ["docker", "info"], timeout=15)
+    if docker_ok:
+        add(docker_line, True)
+    else:
+        # O core (esqueleto, busca, db:links, docs) funciona sem Docker.
+        lines.append(
+            "- AVISO: docker - indisponível (fixture/db ao vivo desativados)"
+        )
 
     workspace_path = os.path.abspath(ctx.workspace)
     try:
@@ -78,19 +86,30 @@ def handle(ctx, params):
             exists,
         )
 
-    codeknow = get_tool_path(ctx.config, "codeknow") or "codeknow"
-    add(*_check_command("codeknow", [codeknow, "--version"], timeout=60))
+    codeknow = get_tool_path(ctx.config, "codeknow")
+    if codeknow:
+        lines.append("- AVISO: tools.codeknow ainda configurado, mas não é mais usado")
 
-    problem = tools_problem(ctx.config)
-    add(
-        _line("rag (tools.rag)", problem is None, problem or "path/python/main.py ok"),
-        problem is None,
-    )
+    rag_path = get_tool_path(ctx.config, "rag", "path")
+    if rag_path:
+        problem = tools_problem(ctx.config)
+        add(
+            _line("rag (tools.rag)", problem is None, problem or "path/python/main.py ok"),
+            problem is None,
+        )
 
-    rag_api = get_tool(ctx.config, "rag", "api")
-    if rag_api:
-        ok, detail = _http_ok(rag_api.rstrip("/") + "/health")
-        add(_line("rag (api)", ok, detail), ok)
+        rag_api = get_tool(ctx.config, "rag", "api")
+        if rag_api:
+            ok, detail = _http_ok(rag_api.rstrip("/") + "/health")
+            if ok:
+                add(_line("rag (api)", True, detail), True)
+            else:
+                # API parada não invalida o ambiente: o RAG é opcional.
+                lines.append(
+                    f"- AVISO: rag (api) - parada; suba com `/harness start --rag`"
+                )
+    else:
+        lines.append("- AVISO: RAG não configurado (opcional; o código usa busca JIT)")
 
     summary = "ambiente OK" if ok_all else "há verificações com falha"
     return TaskResult(
@@ -105,7 +124,7 @@ register(
     TaskSpec(
         name="env:check",
         intent="read",
-        description="Verifica o ambiente do harness (git, docker, python, codeknow, rag)",
+        description="Verifica o ambiente do harness (git, docker, workspace e RAG opcional)",
         required=[],
         optional=[],
         handler=handle,

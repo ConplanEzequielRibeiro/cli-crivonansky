@@ -95,8 +95,13 @@ def _publish_tree(src: str, dst: str, extensions: set[str] | None = None) -> int
     return count
 
 
-def _publish(ctx, raw: str) -> tuple[int, int]:
-    """Espelha o workspace no ``data/raw`` do RAG; devolve (total, fontes de código)."""
+def _publish(ctx, raw: str) -> int:
+    """Espelha a camada semântica do workspace no ``data/raw`` do RAG.
+
+    Código-fonte **não** é publicado: a navegação em código é JIT
+    (``code:search``/``code:read``/``code:symbol``). Só vão para o índice
+    schema, vínculos código↔tabela, manuais e tickets.
+    """
     ws = workspace(ctx)
     copied = 0
 
@@ -116,37 +121,13 @@ def _publish(ctx, raw: str) -> tuple[int, int]:
     )
 
     # Vínculos código↔tabela, FKs inferidas, includes e visões por tabela.
-    # O db:links gera os Markdown; o sync espelha a árvore inteira.
     copied += _publish_tree(
         os.path.join(ws, "knowledge", "links"),
         os.path.join(raw, "tech", "_harness", "links"),
         {".md"},
     )
 
-    # Código-fonte pré-processado por code:preprocess (PHP/Python/JavaScript).
-    code_target = os.path.join(raw, "tech", "_harness", "code")
-    code_copied = _publish_tree(
-        os.path.join(ws, "knowledge", "code", "src"),
-        os.path.join(code_target, "src"),
-        {".php", ".py", ".js"},
-    )
-    copied += code_copied
-
-    # Artefatos gerados pelo codeknow a partir do grafo AST.
-    graph_out = os.path.join(ws, "knowledge", "code", "codegraph-out")
-    report = os.path.join(graph_out, "GRAPH_REPORT.md")
-    if os.path.isfile(report):
-        os.makedirs(code_target, exist_ok=True)
-        shutil.copy2(report, os.path.join(code_target, "CODE_GRAPH_REPORT.md"))
-        copied += 1
-
-    copied += _publish_tree(
-        os.path.join(graph_out, "wiki"),
-        os.path.join(code_target, "wiki"),
-        {".md"},
-    )
-
-    return copied, code_copied
+    return copied
 
 
 def _path_error(ctx, exc: OSError, step: str) -> TaskResult:
@@ -218,7 +199,7 @@ def handle_sync(ctx, params):
         return _path_error(ctx, exc, "criar data/raw")
 
     try:
-        copied, code_copied = _publish(ctx, raw)
+        copied = _publish(ctx, raw)
     except OSError as exc:
         return _path_error(ctx, exc, "publicar no RAG")
 
@@ -232,10 +213,7 @@ def handle_sync(ctx, params):
     if res.exit_code != 0:
         return TaskResult(False, "ingestão do RAG falhou", details=res.combined, exit_code=res.exit_code)
 
-    summary = f"{copied} arquivo(s) publicados"
-    if code_copied:
-        summary += f" ({code_copied} fonte(s) de código)"
-    summary += "; ingestão concluída"
+    summary = f"{copied} arquivo(s) publicados; ingestão concluída"
 
     return TaskResult(
         True,

@@ -4,7 +4,7 @@ from commands.complements.harness.tasks import links
 from commands.complements.harness.task_types import TaskContext
 
 
-def _context(tmp_path, extra_files=None, graph=None):
+def _context(tmp_path, extra_files=None, skeleton=None):
     repo = tmp_path / "repo"
     repo.mkdir()
     files = {
@@ -40,10 +40,10 @@ def _context(tmp_path, extra_files=None, graph=None):
         json.dumps(catalog), encoding="utf-8"
     )
 
-    if graph is not None:
-        graph_dir = workspace / "knowledge" / "code" / "codegraph-out"
-        graph_dir.mkdir(parents=True)
-        (graph_dir / "graph.json").write_text(json.dumps(graph), encoding="utf-8")
+    if skeleton is not None:
+        skeleton_dir = workspace / "knowledge" / "skeleton"
+        skeleton_dir.mkdir(parents=True)
+        (skeleton_dir / "project.json").write_text(json.dumps(skeleton), encoding="utf-8")
 
     return TaskContext(
         config={"legacy": {"repo_path": str(repo)}},
@@ -236,7 +236,7 @@ def test_unknown_variable_table_is_not_reported(tmp_path):
     assert "$tabela" not in {item["table"] for item in _links(tmp_path)}
 
 
-def test_symbol_resolved_from_codeknow_graph(tmp_path):
+def test_symbol_resolved_from_skeleton(tmp_path):
     source = (
         "<?php\n"
         "function salvar_nf() {\n"
@@ -245,23 +245,22 @@ def test_symbol_resolved_from_codeknow_graph(tmp_path):
         "}\n"
         '$sql = "SELECT * FROM tb_fora";\n'
     )
-    graph = {
-        "nodes": [
-            {
-                "label": "salvar_nf()",
-                "_callable": True,
-                "source_file": "funcoes.php",
-                "source_location": "L2",
+    skeleton = {
+        "files_index": {
+            "funcoes.php": {
+                "symbols": [
+                    {"name": "salvar_nf", "line": 2, "end": 5, "kind": "function"}
+                ]
             }
-        ]
+        }
     }
-    ctx = _context(tmp_path, {"funcoes.php": source}, graph=graph)
+    ctx = _context(tmp_path, {"funcoes.php": source}, skeleton=skeleton)
     links.handle(ctx, {})
 
     links_data = _links(tmp_path)
     inside = _by_table(links_data, "tb_nf")
     outside = _by_table(links_data, "tb_fora")
-    assert inside and inside[0]["symbol"] == "salvar_nf()"
+    assert inside and inside[0]["symbol"] == "salvar_nf"
     assert outside and outside[0]["symbol"] is None
 
 

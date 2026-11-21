@@ -2,7 +2,7 @@
 
 O ``CommandExecutor`` captura o ``stdout`` do comando em um ``StringIO``, então
 um ``print`` só aparece quando a tarefa termina. Tarefas que varrem repositórios
-grandes (``db:links``, ``code:preprocess``) usam este módulo para publicar o
+grandes (``db:links``, ``code:skeleton``) usam este módulo para publicar o
 andamento em tempo real por três canais:
 
 * **sink** — callback registrado pelo host (a TUI escreve no ``RichLog``);

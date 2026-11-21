@@ -41,7 +41,7 @@ def test_start_forwards_no_docker_flag(monkeypatch):
 
     assert ok is True
     assert captured["no_docker"] is True
-    assert captured["skip_rag"] is False
+    assert captured["with_rag"] is False
     assert data["summary"] == "ok"
 
 
