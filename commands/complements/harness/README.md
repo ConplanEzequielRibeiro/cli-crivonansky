@@ -227,7 +227,7 @@ workspace/knowledge/
 | `db:snapshot` | read | Schema MySQL (docker exec ou dump) |
 | `db:schema` | read | Markdown de uma tabela |
 | `db:query` | read | SELECT/SHOW/DESCRIBE/EXPLAIN |
-| `db:links` | read | SQL embutido + FKs inferidas + includes + visões `tables/*.md` |
+| `db:links` | read | SQL embutido + FKs inferidas + includes/imports + visões `tables/*.md` (segue o perfil de stack) |
 | `docs:import` | read | Manuais e tickets |
 | `rag:serve` | read | Inicia/para/consulta a API local do RAG (opcional) |
 | `rag:sync` | read | Publica a camada semântica no RAG e ingere |

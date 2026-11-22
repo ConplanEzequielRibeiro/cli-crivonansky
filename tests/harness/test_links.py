@@ -311,7 +311,7 @@ def test_summary_reports_files_and_duration(tmp_path):
     result = links.handle(ctx, {})
 
     assert "arquivo(s)" in result.summary
-    assert result.details == ""
+    assert "stack: php-mysql" in result.details
 
 
 def test_duplicate_sql_is_parsed_once(tmp_path):
@@ -348,7 +348,7 @@ def test_max_file_mb_skips_large_files(tmp_path):
 
     result = links.handle(ctx, {"max_file_mb": "0"})
     assert any(item["table"] == "tb_grande" for item in _links(tmp_path))
-    assert result.details == ""
+    assert "stack: php-mysql" in result.details
 
     result = links.handle(ctx, {"max_file_mb": "1"})
     assert "tb_grande" not in {item["table"] for item in _links(tmp_path)}

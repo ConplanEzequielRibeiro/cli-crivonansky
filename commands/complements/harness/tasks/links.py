@@ -1,11 +1,13 @@
-"""Tarefa db:links — extrai SQL embutido em PHP/JS e vínculos com tabelas.
+"""Tarefa db:links — extrai SQL embutido no código e vínculos com tabelas.
 
-Além do extrator, a tarefa resolve o símbolo (função/método) que contém cada
-ocorrência a partir do esqueleto (`code:skeleton`) e gera visões em Markdown:
+O recorte de arquivos e o dialeto vêm do perfil de stack (`legacy.stack`), então
+o mesmo extrator atende PHP, Java, C#, Ruby, JS/TS etc. A tarefa resolve o
+símbolo (função/método) que contém cada ocorrência a partir do esqueleto
+(`code:skeleton`) e gera visões em Markdown:
 
 * ``code-db-links.json`` — vínculos código ↔ tabela;
 * ``fk-inferred.json`` — FKs sugeridas a partir de JOINs e convenções de nome;
-* ``includes.json`` — ``include``/``require`` de PHP;
+* ``includes.json`` — ``include``/``require``/``import``/``using``;
 * ``code-db-links.md``, ``fk-inferred.md``, ``includes.md`` e ``tables/<tabela>.md``.
 """
 
@@ -21,10 +23,12 @@ from sqlglot import exp
 
 from ..catalog import register
 from ..filters import iter_files
+from ..profiles import resolve_profile
 from ..progress import for_context, format_duration
 from ..task_types import TaskResult, TaskSpec
 from ..util import as_int, legacy_repo, read_text, workspace, write_json, write_text
 
+# Recorte histórico (usado quando nenhum perfil é resolvido nos testes).
 EXTENSIONS = {".php", ".js", ".ts", ".jsx", ".tsx"}
 
 # Acima disso o sqlglot pode demorar demais em uma única instrução; nesse caso
@@ -64,9 +68,19 @@ _TABLE_REF_RE = re.compile(
 # ---------------------------------------------------------------------------
 # Helpers de arquivo
 # ---------------------------------------------------------------------------
-def _iter_files(root: str, skipped: dict | None = None, max_bytes: int = 0):
+def _iter_files(
+    root: str,
+    skipped: dict | None = None,
+    max_bytes: int = 0,
+    extensions: set[str] | frozenset[str] | None = None,
+):
     """Percorre as fontes analisáveis, acumulando estatísticas em ``skipped``."""
-    yield from iter_files(root, EXTENSIONS, max_bytes=max_bytes, skipped=skipped)
+    yield from iter_files(
+        root,
+        extensions or EXTENSIONS,
+        max_bytes=max_bytes,
+        skipped=skipped,
+    )
 
 
 class LineIndex:
@@ -291,19 +305,21 @@ def _analyze_heuristic(sql: str) -> set[tuple[str, str, str]]:
 
 
 @lru_cache(maxsize=1024)
-def _parse_cached(sql: str):
+def _parse_cached(sql: str, dialect: str):
     """Parse do sqlglot memoizado: o mesmo SQL costuma se repetir no legado."""
     if len(sql) > MAX_SQL_CHARS:
         return None
     try:
-        return tuple(sqlglot.parse(sql, read="mysql"))
+        return tuple(sqlglot.parse(sql, read=dialect))
     except Exception:  # noqa: BLE001
         return None
 
 
-def _analyze_sql(sql: str) -> tuple[list[tuple[str, str, str]], str, tuple | None]:
+def _analyze_sql(
+    sql: str, dialect: str = "mysql"
+) -> tuple[list[tuple[str, str, str]], str, tuple | None]:
     """Devolve (entradas, confiança, statements), com confiança parsed | heuristic."""
-    statements = _parse_cached(sql)
+    statements = _parse_cached(sql, dialect)
     if statements is None:
         return sorted(_analyze_heuristic(sql)), "heuristic", None
 
@@ -588,10 +604,63 @@ def _safe_filename(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]", "_", name)
 
 
+def _extract_includes(text: str, rel: str, index_lines: LineIndex, profile, extension: str):
+    """``include``/``require`` (PHP) ou imports da linguagem do perfil."""
+    if extension == ".php":
+        items = []
+        for match in INCLUDE_RE.finditer(text):
+            expression = match.group(2).strip()
+            quoted = re.search(r"""['"]([^'"]+)['"]""", expression)
+            items.append(
+                {
+                    "file": rel,
+                    "line": index_lines.line(match.start()),
+                    "type": match.group(1).lower(),
+                    "target": quoted.group(1) if quoted else expression,
+                }
+            )
+        return items
+
+    language = profile.languages.get(extension)
+    pattern = profile.import_patterns.get(language or "")
+    if not pattern:
+        return []
+
+    items = []
+    for match in re.finditer(pattern, text, re.MULTILINE):
+        line_text = match.group(0).strip()
+        keyword = re.match(r"^\s*#?\s*(\w+)", line_text)
+        rest = re.sub(r"^\s*#?\s*\w+\s*", "", line_text)
+        quoted = re.search(r"""['"]([^'"]+)['"]""", rest)
+        angle = re.search(r"<([^>]+)>", rest)
+        if quoted:
+            target = quoted.group(1)
+        elif angle:
+            target = angle.group(1)
+        elif rest.strip():
+            target = rest.strip().rstrip(";").strip().split()[0]
+        else:
+            target = line_text[:200]
+        items.append(
+            {
+                "file": rel,
+                "line": index_lines.line(match.start()),
+                "type": keyword.group(1).lower() if keyword else "import",
+                "target": target,
+            }
+        )
+    return items
+
+
 # ---------------------------------------------------------------------------
 # Handler
 # ---------------------------------------------------------------------------
 def handle(ctx, params):
+    try:
+        profile = resolve_profile(ctx.config)
+    except ValueError as exc:
+        return TaskResult(False, str(exc), exit_code=2)
+
     root = legacy_repo(ctx)
     if not os.path.isdir(root):
         return TaskResult(False, f"repositório não encontrado: {root}", exit_code=2)
@@ -605,7 +674,14 @@ def handle(ctx, params):
     symbols = _load_symbols(ctx, root)
 
     skipped: dict = {}
-    files = list(_iter_files(root, skipped, max_bytes=max_bytes))
+    files = list(
+        _iter_files(
+            root,
+            skipped,
+            max_bytes=max_bytes,
+            extensions=profile.sql_extensions,
+        )
+    )
     if only_file:
         wanted = str(only_file).replace("\\", "/")
         files = [path for path in files if os.path.relpath(path, root).replace("\\", "/") == wanted]
@@ -626,21 +702,19 @@ def handle(ctx, params):
         progress.bytes_read = bytes_read
         index_lines = LineIndex(text)
 
-        for match in INCLUDE_RE.finditer(text):
-            expression = match.group(2).strip()
-            quoted = re.search(r"""['"]([^'"]+)['"]""", expression)
-            includes.append(
-                {
-                    "file": rel,
-                    "line": index_lines.line(match.start()),
-                    "type": match.group(1).lower(),
-                    "target": quoted.group(1) if quoted else expression,
-                }
+        includes.extend(
+            _extract_includes(
+                text,
+                rel,
+                index_lines,
+                profile,
+                os.path.splitext(path)[1].lower(),
             )
+        )
 
         if SQL_KEYWORDS.search(text):
             for line, sql in _iter_sql(text, index_lines):
-                entries, confidence, statements = _analyze_sql(sql)
+                entries, confidence, statements = _analyze_sql(sql, profile.db_dialect)
                 symbol = _resolve_symbol(symbols, rel, line)
 
                 for table, operation, kind in entries:
@@ -719,15 +793,15 @@ def handle(ctx, params):
 
     elapsed = progress.elapsed()
     progress.finish(
-        f"{len(links)} vínculo(s), {len(fks)} FK(s), {len(includes)} include/require"
+        f"{len(links)} vínculo(s), {len(fks)} FK(s), {len(includes)} include/import"
     )
 
     summary = (
         f"{len(links)} vínculo(s) código↔tabela, {len(fks)} FK(s) inferida(s), "
-        f"{len(includes)} include/require em {len(files)} arquivo(s) "
+        f"{len(includes)} include/require/import em {len(files)} arquivo(s) "
         f"({format_duration(elapsed)})"
     )
-    notes = []
+    notes = [f"stack: {profile.name} | dialeto SQL: {profile.db_dialect}"]
     if skipped.get("build_artifacts"):
         notes.append(f"{skipped['build_artifacts']} bundle(s) minificado(s) ignorado(s)")
     if skipped.get("large_files"):
