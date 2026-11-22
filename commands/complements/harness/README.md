@@ -224,7 +224,7 @@ workspace/knowledge/
 | `env:check` | read | Verifica git, docker, workspace e RAG opcional |
 | `context:pack` | read | Empacota arquivos em Markdown |
 | `file:read` | read | Lê arquivo com números de linha |
-| `db:snapshot` | read | Schema MySQL (docker exec ou dump) |
+| `db:snapshot` | read | Schema do banco (live MySQL/Postgres ou dump do dialeto do perfil) |
 | `db:schema` | read | Markdown de uma tabela |
 | `db:query` | read | SELECT/SHOW/DESCRIBE/EXPLAIN |
 | `db:links` | read | SQL embutido + FKs inferidas + includes/imports + visões `tables/*.md` (segue o perfil de stack) |

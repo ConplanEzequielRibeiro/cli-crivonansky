@@ -9,6 +9,7 @@ from sqlglot import exp
 
 from ..catalog import register
 from ..config import get_legacy, get_legacy_path
+from ..profiles import resolve_profile
 from ..runner import run_process
 from ..task_types import TaskResult, TaskSpec
 from ..util import (
@@ -20,6 +21,9 @@ from ..util import (
     write_json,
     write_text,
 )
+
+# Dialetos com coletor ao vivo (via `docker exec`). Os demais usam dump.
+LIVE_DIALECTS = {"mysql", "mariadb", "postgres"}
 
 
 # ---------------------------------------------------------------------------
@@ -58,10 +62,16 @@ def _literal(value) -> str | None:
 
 
 def _parse_index_sql(text: str) -> dict | None:
-    match = re.search(r"`([^`]+)`\s*\(([^)]*)\)", text)
+    match = re.search(r"[`\"]([^`\"]+)[`\"]\s*\(([^)]*)\)", text)
+    if not match:
+        match = re.search(r"\b(\w+)\s*\(([^)]*)\)", text)
     if not match:
         return None
-    columns = [part.strip().strip("`") for part in match.group(2).split(",")]
+    columns = [
+        part.strip().strip('`"').strip().split()[0]
+        for part in match.group(2).split(",")
+        if part.strip()
+    ]
     return {
         "name": match.group(1),
         "columns": columns,
@@ -74,9 +84,9 @@ def _table_comment(ddl: str) -> str | None:
     return match.group(1) if match else None
 
 
-def _parse_table(create) -> dict:
+def _parse_table(create, dialect: str = "mysql") -> dict:
     name = create.this.this.name
-    ddl = create.sql(dialect="mysql")
+    ddl = create.sql(dialect=dialect)
 
     columns = []
     for col in create.find_all(exp.ColumnDef):
@@ -91,7 +101,7 @@ def _parse_table(create) -> dict:
             if isinstance(kind, exp.NotNullColumnConstraint):
                 nullable = False
             elif isinstance(kind, exp.DefaultColumnConstraint):
-                default = kind.this.sql(dialect="mysql") if kind.this is not None else None
+                default = kind.this.sql(dialect=dialect) if kind.this is not None else None
             elif isinstance(kind, exp.CommentColumnConstraint):
                 comment = _literal(kind.this)
             elif isinstance(kind, exp.PrimaryKeyColumnConstraint):
@@ -102,7 +112,7 @@ def _parse_table(create) -> dict:
         columns.append(
             {
                 "name": col.name,
-                "type": dtype.sql(dialect="mysql") if dtype is not None else "",
+                "type": dtype.sql(dialect=dialect) if dtype is not None else "",
                 "nullable": nullable,
                 "default": default,
                 "key": key,
@@ -116,7 +126,7 @@ def _parse_table(create) -> dict:
         if isinstance(node, exp.PrimaryKey):
             primary_columns = _col_names(node.expressions)
         elif isinstance(node, (exp.UniqueColumnConstraint, exp.IndexColumnConstraint)):
-            parsed = _parse_index_sql(node.sql(dialect="mysql"))
+            parsed = _parse_index_sql(node.sql(dialect=dialect))
             if parsed:
                 indexes.append(parsed)
 
@@ -158,7 +168,7 @@ def _parse_table(create) -> dict:
 
     return {
         "name": name,
-        "engine": "InnoDB",
+        "engine": "InnoDB" if dialect in ("mysql", "mariadb") else None,
         "comment": _table_comment(ddl),
         "approx_rows": None,
         "columns": columns,
@@ -167,13 +177,13 @@ def _parse_table(create) -> dict:
     }
 
 
-def parse_dump(sql_text: str, database: str | None = None) -> dict:
+def parse_dump(sql_text: str, database: str | None = None, dialect: str = "mysql") -> dict:
     tables = []
     views = []
     routines = []
     db_name = database
 
-    for stmt in sqlglot.parse(sql_text, read="mysql"):
+    for stmt in sqlglot.parse(sql_text, read=dialect):
         if stmt is None:
             continue
 
@@ -181,12 +191,12 @@ def parse_dump(sql_text: str, database: str | None = None) -> dict:
             db_name = stmt.this.name if stmt.this is not None else db_name
         elif isinstance(stmt, exp.Create):
             if stmt.kind == "TABLE":
-                tables.append(_parse_table(stmt))
+                tables.append(_parse_table(stmt, dialect=dialect))
             elif stmt.kind == "VIEW":
                 views.append(
                     {
                         "name": stmt.this.this.name if hasattr(stmt.this, "this") else str(stmt.this),
-                        "definition": stmt.sql(dialect="mysql"),
+                        "definition": stmt.sql(dialect=dialect),
                     }
                 )
             elif stmt.kind in ("PROCEDURE", "FUNCTION"):
@@ -194,7 +204,8 @@ def parse_dump(sql_text: str, database: str | None = None) -> dict:
 
     return {
         "database": db_name or "unknown",
-        "extracted_from": {"container": None, "server_version": "dump"},
+        "dialect": dialect,
+        "extracted_from": {"container": None, "server_version": "dump", "dialect": dialect},
         "tables": tables,
         "views": views,
         "routines": routines,
@@ -231,7 +242,7 @@ def _mysql_rows(ctx, sql: str) -> list[list[str]]:
     return rows
 
 
-def snapshot_live(ctx) -> dict:
+def snapshot_live_mysql(ctx) -> dict:
     database = get_legacy(ctx.config, "db_name") or "unknown"
 
     tables_rows = _mysql_rows(
@@ -329,11 +340,199 @@ def snapshot_live(ctx) -> dict:
 
     return {
         "database": database,
-        "extracted_from": {"container": get_legacy(ctx.config, "db_container"), "server_version": "live"},
+        "extracted_from": {"container": get_legacy(ctx.config, "db_container"), "server_version": "live", "dialect": "mysql"},
         "tables": list(tables.values()),
         "views": views,
         "routines": [],
     }
+
+
+def _postgres_rows(ctx, sql: str) -> list[list[str]]:
+    container = get_legacy(ctx.config, "db_container")
+    database = get_legacy(ctx.config, "db_name")
+    user_env = get_legacy(ctx.config, "db_user_env")
+    pass_env = get_legacy(ctx.config, "db_password_env")
+    user = os.environ.get(user_env, "postgres") if user_env else "postgres"
+    password = os.environ.get(pass_env, "") if pass_env else ""
+
+    cmd = ["docker", "exec"]
+    if password:
+        cmd.extend(["-e", f"PGPASSWORD={password}"])
+    cmd.append(str(container))
+    cmd.extend(["psql", f"-U{user}", "-t", "-A", "-F", "\t", "-c", sql])
+    if database:
+        cmd.extend(["-d", str(database)])
+
+    res = run_process(cmd, timeout=120)
+    if res.exit_code != 0 or res.timed_out:
+        raise RuntimeError(res.combined or "falha ao consultar o PostgreSQL")
+
+    rows = []
+    for line in res.stdout.splitlines():
+        if line.strip():
+            rows.append(line.split("\t"))
+    return rows
+
+
+def _db_rows(ctx, sql: str, dialect: str) -> list[list[str]]:
+    """Executa a consulta no contêiner do banco, conforme o dialeto."""
+    if dialect in ("mysql", "mariadb"):
+        return _mysql_rows(ctx, sql)
+    if dialect == "postgres":
+        return _postgres_rows(ctx, sql)
+    raise RuntimeError(
+        f"consulta ao vivo não suportada para o dialeto {dialect}; "
+        "use o cliente do banco ou um dump"
+    )
+
+
+def snapshot_live_postgres(ctx) -> dict:
+    database = get_legacy(ctx.config, "db_name") or "unknown"
+    not_system = (
+        "table_schema = current_schema()"
+    )
+
+    tables_rows = _postgres_rows(
+        ctx,
+        "SELECT c.relname, COALESCE(obj_description(c.oid, 'pg_class'), ''), "
+        "GREATEST(c.reltuples::bigint, 0) "
+        "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+        f"WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p') "
+        "ORDER BY c.relname",
+    )
+    columns_rows = _postgres_rows(
+        ctx,
+        "SELECT table_name, column_name, data_type, is_nullable, column_default "
+        f"FROM information_schema.columns WHERE {not_system} "
+        "ORDER BY table_name, ordinal_position",
+    )
+    key_rows = _postgres_rows(
+        ctx,
+        "SELECT tc.table_name, tc.constraint_name, tc.constraint_type, kcu.column_name "
+        "FROM information_schema.table_constraints tc "
+        "JOIN information_schema.key_column_usage kcu "
+        "  ON kcu.constraint_name = tc.constraint_name "
+        " AND kcu.table_schema = tc.table_schema "
+        f"WHERE {not_system} AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE') "
+        "ORDER BY tc.table_name, tc.constraint_name, kcu.ordinal_position",
+    )
+    fk_rows = _postgres_rows(
+        ctx,
+        "SELECT tc.table_name, kcu.column_name, ccu.table_name, ccu.column_name, "
+        "tc.constraint_name "
+        "FROM information_schema.table_constraints tc "
+        "JOIN information_schema.key_column_usage kcu "
+        "  ON kcu.constraint_name = tc.constraint_name "
+        " AND kcu.table_schema = tc.table_schema "
+        "JOIN information_schema.constraint_column_usage ccu "
+        "  ON ccu.constraint_name = tc.constraint_name "
+        " AND ccu.table_schema = tc.table_schema "
+        f"WHERE {not_system} AND tc.constraint_type = 'FOREIGN KEY'",
+    )
+    view_rows = _postgres_rows(
+        ctx,
+        "SELECT table_name, COALESCE(view_definition, '') "
+        f"FROM information_schema.views WHERE {not_system}",
+    )
+
+    tables: dict[str, dict] = {}
+    for row in tables_rows:
+        row += [""] * (3 - len(row))
+        tables[row[0]] = {
+            "name": row[0],
+            "engine": None,
+            "comment": row[1] or None,
+            "approx_rows": int(row[2]) if row[2].isdigit() else None,
+            "columns": [],
+            "indexes": [],
+            "foreign_keys": [],
+        }
+
+    for row in columns_rows:
+        row += [""] * (5 - len(row))
+        table = tables.get(row[0])
+        if table is None:
+            continue
+        dtype = row[2] or ""
+        if row[4]:
+            dtype = f"{dtype} default {row[4]}"
+        table["columns"].append(
+            {
+                "name": row[1],
+                "type": dtype,
+                "nullable": row[3].upper() == "YES",
+                "default": row[4] or None,
+                "key": None,
+                "comment": None,
+            }
+        )
+
+    index_map: dict[tuple[str, str], dict] = {}
+    for row in key_rows:
+        row += [""] * (4 - len(row))
+        table_name, constraint_name, constraint_type, column_name = row[:4]
+        table = tables.get(table_name)
+        if table is None:
+            continue
+        if constraint_type == "PRIMARY KEY":
+            table["columns"] = [
+                {**column, "key": "PRI"} if column["name"] == column_name else column
+                for column in table["columns"]
+            ]
+            entry = index_map.setdefault(
+                (table_name, constraint_name or "PRIMARY"),
+                {"name": constraint_name or "PRIMARY", "columns": [], "unique": True},
+            )
+        else:
+            entry = index_map.setdefault(
+                (table_name, constraint_name),
+                {"name": constraint_name, "columns": [], "unique": True},
+            )
+        entry["columns"].append(column_name)
+
+    for (table_name, _), entry in index_map.items():
+        tables[table_name]["indexes"].append(entry)
+
+    for row in fk_rows:
+        row += [""] * (5 - len(row))
+        table = tables.get(row[0])
+        if table is None:
+            continue
+        table["foreign_keys"].append(
+            {
+                "name": row[4] or None,
+                "columns": [row[1]],
+                "ref_table": row[2],
+                "ref_columns": [row[3]],
+                "origin": "declared",
+            }
+        )
+
+    views = []
+    for row in view_rows:
+        row += [""] * (2 - len(row))
+        views.append({"name": row[0], "definition": row[1]})
+
+    return {
+        "database": database,
+        "dialect": "postgres",
+        "extracted_from": {
+            "container": get_legacy(ctx.config, "db_container"),
+            "server_version": "live",
+            "dialect": "postgres",
+        },
+        "tables": list(tables.values()),
+        "views": views,
+        "routines": [],
+    }
+
+
+def snapshot_live(ctx, dialect: str = "mysql") -> dict:
+    if dialect in ("mysql", "mariadb"):
+        return snapshot_live_mysql(ctx)
+    if dialect == "postgres":
+        return snapshot_live_postgres(ctx)
+    raise RuntimeError(f"snapshot ao vivo não suportado para o dialeto {dialect}")
 
 
 # ---------------------------------------------------------------------------
@@ -440,40 +639,73 @@ def _write_outputs(ctx, catalog: dict) -> list[str]:
 # ---------------------------------------------------------------------------
 def handle_snapshot(ctx, params):
     source = str(params.get("source") or "auto").lower()
+
+    try:
+        profile = resolve_profile(ctx.config)
+    except ValueError as exc:
+        return TaskResult(False, str(exc), exit_code=2)
+
+    dialect = profile.db_dialect
     dump_path = get_legacy_path(ctx.config, "schema_dump")
+    live_ready = dialect in LIVE_DIALECTS and bool(get_legacy(ctx.config, "db_container"))
 
     catalog = None
     error = None
 
     if source in ("auto", "live"):
-        try:
-            catalog = snapshot_live(ctx)
-        except Exception as exc:  # noqa: BLE001
-            error = str(exc)
-            if source == "live":
-                return TaskResult(
-                    False,
-                    "falha no snapshot ao vivo",
-                    details=error,
-                    exit_code=2,
-                )
+        if live_ready:
+            try:
+                catalog = snapshot_live(ctx, dialect)
+            except Exception as exc:  # noqa: BLE001
+                error = str(exc)
+                if source == "live":
+                    return TaskResult(
+                        False,
+                        "falha no snapshot ao vivo",
+                        details=error,
+                        exit_code=2,
+                    )
+        elif source == "live":
+            return TaskResult(
+                False,
+                f"snapshot ao vivo não suportado para o dialeto {dialect}",
+                details=(
+                    "Dialetos com coletor ao vivo: mysql, postgres. "
+                    "Para os demais, aponte legacy.schema_dump e use --source dump."
+                ),
+                exit_code=2,
+                status="unavailable",
+            )
 
     if catalog is None and dump_path and os.path.isfile(dump_path):
-        catalog = parse_dump(read_text(dump_path))
+        catalog = parse_dump(
+            read_text(dump_path),
+            database=get_legacy(ctx.config, "db_name"),
+            dialect=dialect,
+        )
         catalog["extracted_from"]["source_file"] = dump_path
 
     if catalog is None:
+        hint = ""
+        if not live_ready and dialect not in LIVE_DIALECTS:
+            hint = (
+                f"dialeto {dialect} não tem coletor ao vivo; "
+                "configure legacy.schema_dump e use --source dump"
+            )
         return TaskResult(
             False,
             "não foi possível obter o schema (Docker indisponível e dump ausente)",
-            details=error or "",
+            details="\n".join(part for part in (hint, error or "") if part),
             exit_code=2,
         )
+
+    catalog["dialect"] = dialect
+    catalog.setdefault("extracted_from", {})["dialect"] = dialect
 
     artifacts = _write_outputs(ctx, catalog)
     summary = (
         f"schema de '{catalog['database']}': {len(catalog['tables'])} tabela(s), "
-        f"{len(catalog['views'])} view(s)"
+        f"{len(catalog['views'])} view(s) ({profile.name}/{dialect})"
     )
     if error:
         summary += " (via dump; Docker indisponível)"
@@ -515,10 +747,17 @@ def handle_query(ctx, params):
     if not sql:
         return TaskResult(False, "parâmetro 'sql' obrigatório", exit_code=2)
 
+    config = getattr(ctx, "config", None) or {}
     try:
-        statements = sqlglot.parse(str(sql), read="mysql")
+        profile = resolve_profile(config)
+    except ValueError as exc:
+        return TaskResult(False, str(exc), exit_code=2)
+
+    dialect = profile.db_dialect
+    try:
+        statements = sqlglot.parse(str(sql), read=dialect)
     except Exception as exc:  # noqa: BLE001
-        return TaskResult(False, f"SQL inválido: {exc}", exit_code=2)
+        return TaskResult(False, f"SQL inválido para o dialeto {dialect}: {exc}", exit_code=2)
 
     allowed = (exp.Select, exp.Show, exp.Describe)
     if not statements or any(not isinstance(stmt, allowed) for stmt in statements):
@@ -529,13 +768,29 @@ def handle_query(ctx, params):
             status="denied",
         )
 
+    if dialect not in LIVE_DIALECTS:
+        return TaskResult(
+            False,
+            f"db:query ao vivo não suportado para o dialeto {dialect}",
+            details=(
+                "Use o cliente do banco ou um dump. "
+                f"Dialetos com consulta ao vivo: {', '.join(sorted(LIVE_DIALECTS))}."
+            ),
+            exit_code=2,
+            status="unavailable",
+        )
+
     limit = as_int(params.get("limit"), 50)
     query = str(sql).strip().rstrip(";")
-    if isinstance(statements[0], exp.Select) and "limit" not in query.lower():
+    if (
+        isinstance(statements[0], exp.Select)
+        and dialect in ("mysql", "mariadb", "postgres")
+        and "limit" not in query.lower()
+    ):
         query = f"{query} LIMIT {limit}"
 
     try:
-        rows = _mysql_rows(ctx, query)
+        rows = _db_rows(ctx, query, dialect)
     except Exception as exc:  # noqa: BLE001
         return TaskResult(False, "falha ao executar a consulta", details=str(exc), exit_code=2)
 

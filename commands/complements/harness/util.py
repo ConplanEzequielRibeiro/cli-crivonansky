@@ -101,7 +101,9 @@ def ensure_dir(path: str) -> str:
 
 def read_text(path: str) -> str:
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
-        return fh.read()
+        text = fh.read()
+    # Dumps/manuais gerados no Windows costumam vir com BOM.
+    return text[1:] if text.startswith("\ufeff") else text
 
 
 def write_text(path: str, content: str) -> None:
