@@ -4,11 +4,15 @@ import os
 import urllib.request
 
 from ..catalog import register
-from ..config import get_tool, get_tool_path
+from ..config import get_legacy, get_tool, get_tool_path
+from ..filters import iter_files
+from ..profiles import resolve_profile
 from ..runner import run_process
 from ..task_types import TaskResult, TaskSpec
-from ..util import looks_like_path
+from ..util import legacy_repo, looks_like_path
 from .rag import tools_problem
+
+FILE_COUNT_CAP = 20000
 
 
 def _http_ok(url: str, timeout: float = 3) -> tuple[bool, str]:
@@ -90,6 +94,51 @@ def handle(ctx, params):
     if codeknow:
         lines.append("- AVISO: tools.codeknow ainda configurado, mas não é mais usado")
 
+    try:
+        profile = resolve_profile(ctx.config)
+    except ValueError as exc:
+        add(_line("perfil", False, str(exc)), False)
+    else:
+        add(
+            _line(
+                "perfil",
+                True,
+                f"{profile.name} ({profile.label}) | dialeto {profile.db_dialect} "
+                f"| encoding {profile.encoding}",
+            ),
+            True,
+        )
+
+        repo_config = get_legacy(ctx.config, "repo_path")
+        if repo_config:
+            repo = legacy_repo(ctx)
+            if not os.path.isdir(repo):
+                add(_line("repositório", False, repo), False)
+            else:
+                count = 0
+                for _ in iter_files(repo, profile.code_extensions):
+                    count += 1
+                    if count >= FILE_COUNT_CAP:
+                        break
+                if count:
+                    suffix = " (contagem limitada)" if count >= FILE_COUNT_CAP else ""
+                    add(
+                        _line(
+                            "arquivos do perfil",
+                            True,
+                            f"{count} arquivo(s) {sorted(profile.code_extensions)}{suffix}",
+                        ),
+                        True,
+                    )
+                else:
+                    lines.append(
+                        "- AVISO: nenhum arquivo com as extensões do perfil "
+                        f"({', '.join(sorted(profile.code_extensions))}); "
+                        "confira legacy.stack/extensions"
+                    )
+        else:
+            lines.append("- AVISO: legacy.repo_path não configurado")
+
     rag_path = get_tool_path(ctx.config, "rag", "path")
     if rag_path:
         problem = tools_problem(ctx.config)
@@ -124,7 +173,7 @@ register(
     TaskSpec(
         name="env:check",
         intent="read",
-        description="Verifica o ambiente do harness (git, docker, workspace e RAG opcional)",
+        description="Verifica o ambiente do harness (git, docker, workspace, perfil e RAG opcional)",
         required=[],
         optional=[],
         handler=handle,

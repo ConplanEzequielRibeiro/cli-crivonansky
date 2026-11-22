@@ -170,6 +170,41 @@ def test_prepare_runs_rag_sync_only_when_asked(monkeypatch):
     assert tasks == ["db:snapshot", "code:skeleton", "db:links", "docs:import", "rag:sync"]
 
 
+def test_config_info_includes_profile_and_skeleton(tmp_path, monkeypatch):
+    import json
+
+    plugin = tmp_path / "harness"
+    workspace = plugin / "workspace"
+    workspace.mkdir(parents=True)
+    config = workspace / "harness.yaml"
+    config.write_text(
+        f"workspace: {workspace.as_posix()}\n"
+        "legacy:\n"
+        "  stack: java-oracle\n"
+        f"  repo_path: {(tmp_path / 'repo').as_posix()}\n"
+        "tools:\n"
+        "  python: python\n",
+        encoding="utf-8",
+    )
+    skeleton = workspace / "knowledge" / "skeleton"
+    skeleton.mkdir(parents=True)
+    (skeleton / "project.json").write_text(
+        json.dumps({"files": 3, "symbols": 7, "stack": "java-oracle"}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(ops, "PLUGIN_ROOT", plugin)
+
+    info = ops.config_info()
+
+    assert info["stack"] == "java-oracle"
+    assert info["db_dialect"] == "oracle"
+    assert info["encoding"] == "utf-8"
+    assert ".java" in info["extensions"]
+    assert info["skeleton"] == "3 arquivo(s), 7 símbolo(s)"
+    assert info["skeleton_stack"] == "java-oracle"
+
+
 def _stub_start(monkeypatch, rag_result=None):
     calls = {"docker": 0, "powershell": 0, "tasks": []}
 

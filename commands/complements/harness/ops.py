@@ -107,6 +107,52 @@ def _add_tools_info(info: dict, config_path_arg: str | None = None) -> None:
             checker = os.path.isdir if label == "rag_path" else os.path.isfile
             info[f"{label}_exists"] = checker(value)
 
+    _add_profile_info(info, config)
+
+
+def _add_profile_info(info: dict, config: dict) -> None:
+    """Mostra o perfil de stack efetivo e o estado do esqueleto."""
+    import json
+
+    try:
+        from .profiles import resolve_profile
+
+        profile = resolve_profile(config)
+    except Exception as exc:  # noqa: BLE001
+        info["stack"] = f"(falha ao resolver: {exc})"
+        return
+
+    info["stack"] = profile.name
+    info["stack_label"] = profile.label
+    info["db_dialect"] = profile.db_dialect
+    info["encoding"] = profile.encoding
+    info["extensions"] = ", ".join(sorted(profile.code_extensions)) or "(nenhuma)"
+    info["sql_extensions"] = ", ".join(sorted(profile.sql_extensions)) or "(nenhuma)"
+
+    try:
+        from .config import get_workspace
+
+        workspace = get_workspace(config)
+    except Exception:  # noqa: BLE001
+        return
+
+    skeleton = os.path.join(workspace, "knowledge", "skeleton", "project.json")
+    if not os.path.isfile(skeleton):
+        info["skeleton"] = "(nao gerado)"
+        return
+
+    try:
+        with open(skeleton, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError) as exc:
+        info["skeleton"] = f"(falha ao ler: {exc})"
+        return
+
+    info["skeleton"] = (
+        f"{data.get('files', 0)} arquivo(s), {data.get('symbols', 0)} símbolo(s)"
+    )
+    info["skeleton_stack"] = data.get("stack") or "(anterior aos perfis)"
+
 
 def _set_db_env(config_path_arg: str) -> None:
     os.environ.setdefault("HARNESS_DB_USER", "rotacar_read")

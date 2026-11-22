@@ -84,7 +84,7 @@ Para reinstalar do zero, remova `vendor/` e/ou `.venv/` e rode `/harness install
 | `stop` | Para a fixture (e o RAG, se estiver no ar) | `--purge` |
 | `prepare` | `start` + coleta + esqueleto (+ `rag:sync` sob demanda) | `--full`, `--sync`, `--rag`, `--no-docker` |
 | `preprocess` | Alias de `code:skeleton` (compatibilidade) | `--sync`, `--full`, `--no-codeknow`, `--no-wiki` |
-| `config` | Mostra caminhos do plugin/workspace/vendor/venv e `tools.*` | — |
+| `config` | Mostra caminhos do plugin/workspace/vendor/venv, `tools.*` e o perfil efetivo (`stack`, dialeto, encoding, extensões, esqueleto) | — |
 
 ```text
 /harness start                    # fixture MySQL/PHP
