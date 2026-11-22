@@ -269,6 +269,11 @@ Campos relevantes:
 
 | Campo | Usado por | Observação |
 |---|---|---|
+| `legacy.stack` | `code:*`, `db:*` | Perfil de stack: `php-mysql` (padrão), `java-oracle`, `dotnet-sqlserver`, `ruby-postgres`, `node-postgres`, `custom` |
+| `legacy.encoding` | leitura de fontes | `utf-8` (padrão); legado Windows: `cp1252`/`latin-1` |
+| `legacy.extensions` | `code:skeleton`, `db:links` | Sobrepõe as extensões do perfil |
+| `legacy.languages` | `code:skeleton`, `code:outline` | Extensão → linguagem do ast-grep (ex.: `".phtml": "php"`) |
+| `legacy.db_dialect` | `db:snapshot`, `db:links` | Sobrepõe o dialeto do perfil |
 | `legacy.repo_path` | `code:*`, `db:links`, `git:run`, hooks | Repositório legado |
 | `legacy.app_container` | `docker:exec`, `logs:tail`, pipelines | Contêiner da aplicação |
 | `legacy.db_container` | `db:snapshot` live, `db:query` | Contêiner MySQL |

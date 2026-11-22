@@ -1,58 +1,32 @@
 """Extração de símbolos (funções, métodos, classes) do código legado.
 
 Usa ``ast-grep`` (pacote ``ast-grep-py``, wheel nativa) quando disponível e cai
-para regex + casamento de chaves quando não. O esqueleto (`code:skeleton`) e o
-`db:links` compartilham este módulo, então o campo ``symbol`` dos vínculos não
-depende de nenhum grafo externo.
+para regex + casamento de chaves/indentação quando não. A lista de linguagens e
+kinds vem do perfil de stack (`profiles.py`), então o mesmo código atende
+PHP, JS/TS, Python, Java, C#, Ruby, Go, Kotlin, Scala, C/C++ e Elixir.
 """
 
 import os
 import re
 
-# Extensão -> linguagem do ast-grep.
-_LANGUAGES = {
-    ".php": "php",
-    ".js": "javascript",
-    ".jsx": "javascript",
-    ".mjs": "javascript",
-    ".cjs": "javascript",
-    ".ts": "typescript",
-    ".tsx": "tsx",
-    ".py": "python",
-}
+from .profiles import DEFINITION_KINDS, EXTENSION_LANGUAGES, IMPORT_PATTERNS
 
-# Kinds de definição por linguagem (ast-grep) -> rótulo usado no harness.
-_DEFINITION_KINDS = {
-    "php": {
-        "function_definition": "function",
-        "method_declaration": "method",
-        "class_declaration": "class",
-        "interface_declaration": "interface",
-        "trait_declaration": "trait",
-    },
-    "javascript": {
-        "function_declaration": "function",
-        "method_definition": "method",
-        "class_declaration": "class",
-    },
-    "typescript": {
-        "function_declaration": "function",
-        "method_definition": "method",
-        "class_declaration": "class",
-    },
-    "tsx": {
-        "function_declaration": "function",
-        "method_definition": "method",
-        "class_declaration": "class",
-    },
-    "python": {
-        "function_definition": "function",
-        "class_definition": "class",
-    },
+# Extensões cujo bloco termina por indentação (não por chaves).
+_INDENT_EXTENSIONS = {".py", ".rb", ".erb", ".ex", ".exs"}
+
+# Filhos usados como nome quando o nó não expõe o campo `name` (Kotlin).
+_NAME_CHILD_KINDS = {
+    "identifier",
+    "type_identifier",
+    "simple_identifier",
+    "field_identifier",
+    "property_identifier",
+    "constant",
+    "name",
 }
 
 # Fallback (sem ast-grep): (regex, grupo com o nome, rótulo).
-_FALLBACK = {
+_FALLBACK: dict[str, list[tuple[re.Pattern, int, str]]] = {
     ".php": [
         (re.compile(r"\bfunction\s+(\w+)\s*\(", re.I), 1, "function"),
         (re.compile(r"\b(?:class|interface|trait)\s+(\w+)", re.I), 1, "class"),
@@ -84,11 +58,125 @@ _FALLBACK = {
         (re.compile(r"^\s*(?:async\s+)?def\s+(\w+)\s*\(", re.M), 1, "function"),
         (re.compile(r"^\s*class\s+(\w+)", re.M), 1, "class"),
     ],
+    ".java": [
+        (
+            re.compile(r"^\s*(?:public|private|protected)?\s*(?:class|interface|enum|record)\s+(\w+)", re.M),
+            1,
+            "class",
+        ),
+        (
+            re.compile(
+                r"^\s*(?:(?:public|private|protected|static|final|abstract|synchronized|native|default)\s+)*"
+                r"[\w<>\[\],.?]+\s+(\w+)\s*\([^;{}]*\)\s*(?:throws\s+[\w, .]+)?\{",
+                re.M,
+            ),
+            1,
+            "method",
+        ),
+    ],
+    ".cs": [
+        (
+            re.compile(
+                r"^\s*(?:(?:public|private|protected|internal|static|sealed|abstract|partial)\s+)*"
+                r"(?:class|interface|struct|record|enum)\s+(\w+)",
+                re.M,
+            ),
+            1,
+            "class",
+        ),
+        (
+            re.compile(
+                r"^\s*(?:(?:public|private|protected|internal|static|virtual|override|async|sealed)\s+)+"
+                r"[\w<>\[\],.?]+\s+(\w+)\s*\([^;{}]*\)\s*\{",
+                re.M,
+            ),
+            1,
+            "method",
+        ),
+    ],
+    ".rb": [
+        (
+            re.compile(r"^\s*def\s+(?:self\.)?([A-Za-z_]\w*[?!=]?)", re.M),
+            1,
+            "method",
+        ),
+        (re.compile(r"^\s*(?:class|module)\s+([A-Z]\w*(?:::\w+)*)", re.M), 1, "class"),
+    ],
+    ".go": [
+        (
+            re.compile(r"^\s*func\s+(?:\([^)]*\)\s*)?([A-Za-z_]\w*)\s*\(", re.M),
+            1,
+            "function",
+        ),
+        (
+            re.compile(r"^\s*type\s+([A-Za-z_]\w*)\s+(?:struct|interface)", re.M),
+            1,
+            "type",
+        ),
+    ],
+    ".kt": [
+        (
+            re.compile(r"^\s*fun\s+(?:<[^>]+>\s*)?(?:[\w.]+\.)?([A-Za-z_]\w*)\s*\(", re.M),
+            1,
+            "function",
+        ),
+        (
+            re.compile(r"^\s*(?:class|interface|object)\s+([A-Za-z_]\w*)", re.M),
+            1,
+            "class",
+        ),
+    ],
+    ".scala": [
+        (re.compile(r"^\s*def\s+([A-Za-z_]\w*)", re.M), 1, "function"),
+        (
+            re.compile(r"^\s*(?:class|object|trait)\s+([A-Za-z_]\w*)", re.M),
+            1,
+            "class",
+        ),
+    ],
+    ".c": [
+        (
+            re.compile(
+                r"^[^#\n;{}]*?\b([A-Za-z_]\w*)\s*\([^;{}]*\)\s*(?:const\s*)?\{", re.M
+            ),
+            1,
+            "function",
+        ),
+        (re.compile(r"\b(?:struct|enum)\s+(\w+)\s*\{", re.M), 1, "struct"),
+    ],
+    ".cpp": [
+        (
+            re.compile(r"\b(?:class|struct)\s+(\w+)\s*[:{]?", re.M),
+            1,
+            "class",
+        ),
+        (
+            re.compile(
+                r"^[^#\n;{}]*?\b([A-Za-z_]\w*)\s*\([^;{}]*\)\s*(?:const\s*)?\{", re.M
+            ),
+            1,
+            "function",
+        ),
+        (re.compile(r"\bnamespace\s+(\w+)", re.M), 1, "namespace"),
+    ],
+    ".ex": [
+        (re.compile(r"^\s*defmodule\s+([\w.]+)", re.M), 1, "module"),
+        (re.compile(r"^\s*defp?\s+([a-z_]\w*[?!]?)", re.M), 1, "function"),
+    ],
 }
 _FALLBACK[".jsx"] = _FALLBACK[".js"]
 _FALLBACK[".mjs"] = _FALLBACK[".js"]
 _FALLBACK[".cjs"] = _FALLBACK[".js"]
 _FALLBACK[".tsx"] = _FALLBACK[".ts"]
+_FALLBACK[".jsp"] = _FALLBACK[".java"]
+_FALLBACK[".erb"] = _FALLBACK[".rb"]
+_FALLBACK[".kts"] = _FALLBACK[".kt"]
+_FALLBACK[".h"] = _FALLBACK[".c"]
+_FALLBACK[".cc"] = _FALLBACK[".cpp"]
+_FALLBACK[".hpp"] = _FALLBACK[".cpp"]
+
+# Palavras que o regex de função (C-like) pode capturar por engano.
+_NOT_NAMES = {"if", "for", "while", "switch", "catch", "return", "else", "do", "try"}
 
 
 def ast_grep():
@@ -104,35 +192,79 @@ def available() -> bool:
     return ast_grep() is not None
 
 
-def language_for(path: str) -> str | None:
-    return _LANGUAGES.get(os.path.splitext(path)[1].lower())
+def language_for(path: str, languages: dict[str, str] | None = None) -> str | None:
+    mapping = languages if languages is not None else EXTENSION_LANGUAGES
+    return mapping.get(os.path.splitext(path)[1].lower())
 
 
-def definitions(text: str, path: str) -> list[dict]:
+def definitions(
+    text: str,
+    path: str,
+    languages: dict[str, str] | None = None,
+    definition_kinds: dict[str, dict[str, str]] | None = None,
+) -> list[dict]:
     """Lista ``{name, line, end, kind}`` das definições do arquivo (1-based)."""
     extension = os.path.splitext(path)[1].lower()
-    language = _LANGUAGES.get(extension)
+    mapping = languages if languages is not None else EXTENSION_LANGUAGES
+    kinds_map = definition_kinds if definition_kinds is not None else DEFINITION_KINDS
+
+    language = mapping.get(extension)
     if language:
-        found = _definitions_ast(text, language)
+        found = _definitions_ast(text, language, kinds_map.get(language) or {})
         if found is not None:
             return found
     return _definitions_regex(text, extension)
 
 
+def extract_imports(
+    text: str,
+    path: str,
+    import_patterns: dict[str, str] | None = None,
+    limit: int = 40,
+) -> list[str]:
+    """Linhas de import/include do arquivo, conforme o padrão da linguagem."""
+    language = language_for(path)
+    patterns = import_patterns if import_patterns is not None else IMPORT_PATTERNS
+    pattern = patterns.get(language or "")
+    if not pattern:
+        return []
+
+    values: list[str] = []
+    for match in re.finditer(pattern, text, re.MULTILINE):
+        line = match.group(0).strip()
+        if line and line not in values:
+            values.append(line[:160])
+        if len(values) >= limit:
+            break
+    return values
+
+
 # ---------------------------------------------------------------------------
 # ast-grep
 # ---------------------------------------------------------------------------
-def _definitions_ast(text: str, language: str) -> list[dict] | None:
+# Linguagens que podem chegar ao parser. Fora daqui (ex.: `c_sharp`, valor
+# cru do YAML) o ast-grep derruba o processo com PanicException.
+_SUPPORTED_LANGUAGES = frozenset(DEFINITION_KINDS)
+
+
+def _definitions_ast(text: str, language: str, kinds: dict[str, str]) -> list[dict] | None:
+    """Definições via AST. ``None`` significa "use o fallback por regex"."""
+    if not kinds:
+        return None
+
     module = ast_grep()
     if module is None:
         return None
 
-    try:
-        root = module.SgRoot(text, language).root()
-    except Exception:  # noqa: BLE001 - parser não suporta a variação
+    # Allowlist: linguagem fora do mapa (ou inválida) nunca vai ao parser.
+    if language not in _SUPPORTED_LANGUAGES:
         return None
 
-    kinds = _DEFINITION_KINDS.get(language) or {}
+    try:
+        root = module.SgRoot(text, language).root()
+    except BaseException:  # noqa: BLE001 - PyO3 PanicException não herda Exception
+        return None
+
     found: list[dict] = []
     seen: set[tuple[str, int]] = set()
 
@@ -142,8 +274,7 @@ def _definitions_ast(text: str, language: str) -> list[dict] | None:
         except Exception:  # noqa: BLE001
             continue
         for node in nodes:
-            name_node = node.field("name")
-            name = name_node.text() if name_node is not None else ""
+            name = _node_name(node, language)
             if not name:
                 continue
             start = node.range().start.line + 1
@@ -153,6 +284,36 @@ def _definitions_ast(text: str, language: str) -> list[dict] | None:
                 continue
             seen.add(key)
             found.append({"name": name, "line": start, "end": end, "kind": label})
+
+    # C/C++: declarações (`void bar();`) não são `function_definition`.
+    if language in ("c", "cpp"):
+        try:
+            declarators = root.find_all(kind="function_declarator")
+        except Exception:  # noqa: BLE001
+            declarators = []
+        for node in declarators:
+            try:
+                if any(parent.kind() == "function_definition" for parent in node.ancestors()):
+                    continue
+            except Exception:  # noqa: BLE001
+                pass
+            inner = node.field("declarator")
+            text = inner.text() if inner is not None else node.text()
+            name = text.split("(")[0].strip().split("::")[-1].strip()
+            if not name:
+                continue
+            start = node.range().start.line + 1
+            if (name, start) in seen:
+                continue
+            seen.add((name, start))
+            found.append(
+                {
+                    "name": name,
+                    "line": start,
+                    "end": node.range().end.line + 1,
+                    "kind": "function",
+                }
+            )
 
     # JS/TS: `const foo = () => {}` / `const foo = function () {}`.
     if language in ("javascript", "typescript", "tsx"):
@@ -165,19 +326,51 @@ def _definitions_ast(text: str, language: str) -> list[dict] | None:
             value_text = value.text() if value is not None else node.text()
             if "=>" not in value_text and "function" not in value_text:
                 continue
-            name_node = node.field("name")
-            name = name_node.text() if name_node is not None else ""
+            name = _node_name(node, language)
             if not name:
                 continue
             start = node.range().start.line + 1
-            end = node.range().end.line + 1
             if (name, start) in seen:
                 continue
             seen.add((name, start))
-            found.append({"name": name, "line": start, "end": end, "kind": "function"})
+            found.append(
+                {
+                    "name": name,
+                    "line": start,
+                    "end": node.range().end.line + 1,
+                    "kind": "function",
+                }
+            )
 
     found.sort(key=lambda item: (item["line"], item["name"]))
     return found
+
+
+def _node_name(node, language: str) -> str:
+    """Nome da definição, cobrindo nós sem campo ``name`` (Kotlin, C/C++)."""
+    value = node.field("name")
+    if value is not None:
+        text = value.text().strip()
+        if text:
+            return text
+
+    if language in ("c", "cpp") and node.kind() == "function_definition":
+        for child in node.named_children():
+            if child.kind() != "function_declarator":
+                continue
+            inner = child.field("declarator")
+            text = inner.text() if inner is not None else child.text()
+            name = text.split("(")[0].strip().split("::")[-1].strip()
+            if name:
+                return name
+        declarator = node.field("declarator")
+        if declarator is not None:
+            return declarator.text().split("(")[0].strip().split("::")[-1].strip()
+
+    for child in node.named_children():
+        if child.kind() in _NAME_CHILD_KINDS:
+            return child.text().strip()
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +384,7 @@ def _definitions_regex(text: str, extension: str) -> list[dict]:
     for pattern, group, label in patterns:
         for match in pattern.finditer(text):
             name = match.group(group)
-            if not name:
+            if not name or name.lower() in _NOT_NAMES:
                 continue
             line = text.count("\n", 0, match.start()) + 1
             key = (name, line)
@@ -199,8 +392,8 @@ def _definitions_regex(text: str, extension: str) -> list[dict]:
                 continue
             seen.add(key)
 
-            if extension == ".py":
-                end = python_block_end(text, line)
+            if extension in _INDENT_EXTENSIONS:
+                end = indent_block_end(text, line)
             else:
                 end = brace_block_end(text, line)
             found.append({"name": name, "line": line, "end": end or line, "kind": label})
@@ -210,7 +403,7 @@ def _definitions_regex(text: str, extension: str) -> list[dict]:
 
 
 def brace_block_end(text: str, start_line: int, line_starts: list[int] | None = None) -> int | None:
-    """Linha de fechamento de um bloco ``{...}`` (PHP/JS/TS).
+    """Linha de fechamento de um bloco ``{...}`` (PHP/JS/Java/C#/...).
 
     Ignora chaves dentro de strings e comentários. Devolve ``None`` quando o
     bloco não fecha no arquivo.
@@ -287,8 +480,8 @@ def brace_block_end(text: str, start_line: int, line_starts: list[int] | None = 
     return None
 
 
-def python_block_end(text: str, start_line: int) -> int | None:
-    """Última linha do corpo de um ``def``/``class`` pela indentação."""
+def indent_block_end(text: str, start_line: int) -> int | None:
+    """Última linha do corpo de um bloco por indentação (Python/Ruby/Elixir)."""
     lines = text.splitlines()
     if start_line < 1 or start_line > len(lines):
         return None

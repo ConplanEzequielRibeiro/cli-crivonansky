@@ -105,3 +105,55 @@ def test_skeleton_truncates_markdown_over_budget(tmp_path, monkeypatch):
         encoding="utf-8"
     )
     assert "(truncado)" in text
+
+
+def test_skeleton_uses_stack_profile(tmp_path):
+    repo = tmp_path / "repo" / "src"
+    repo.mkdir(parents=True)
+    (repo / "Foo.java").write_text(
+        "package x;\n"
+        "import java.util.List;\n"
+        "public class Foo {\n"
+        "  public int bar(int x) { return x; }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    ctx = TaskContext(
+        config={"legacy": {"repo_path": str(repo), "stack": "java-oracle"}},
+        workspace=str(tmp_path / "ws"),
+        run_dir=str(tmp_path / "run"),
+    )
+
+    result = skeleton.handle(ctx, {})
+
+    assert result.success
+    data = json.loads(
+        (tmp_path / "ws" / "knowledge" / "skeleton" / "project.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert data["stack"] == "java-oracle"
+    assert set(data["files_index"]) == {"Foo.java"}
+    entry = data["files_index"]["Foo.java"]
+    assert {"Foo", "bar"} <= {item["name"] for item in entry["symbols"]}
+    assert "import java.util.List;" in entry["imports"]
+
+    markdown = (tmp_path / "ws" / "knowledge" / "skeleton" / "SKELETON.md").read_text(
+        encoding="utf-8"
+    )
+    assert "Java/Oracle" in markdown
+
+
+def test_skeleton_reports_unknown_stack(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    ctx = TaskContext(
+        config={"legacy": {"repo_path": str(repo), "stack": "cobol"}},
+        workspace=str(tmp_path / "ws"),
+        run_dir=str(tmp_path / "run"),
+    )
+
+    result = skeleton.handle(ctx, {})
+
+    assert result.success is False
+    assert "legacy.stack" in result.summary

@@ -5,6 +5,16 @@ harness_version: 1
 workspace: "{{PLUGIN_ROOT}}/workspace"
 
 legacy:
+  # Perfil de stack: php-mysql (padrão), java-oracle, dotnet-sqlserver,
+  # ruby-postgres, node-postgres ou custom (com overrides abaixo).
+  stack: php-mysql
+  # Encoding dos fontes. Legado Windows costuma ser cp1252/latin-1.
+  encoding: utf-8
+  # Overrides opcionais sobre o perfil:
+  # extensions: [".php", ".phtml"]
+  # sql_extensions: [".php"]
+  # languages: { ".phtml": "php" }
+  # db_dialect: mysql
   # Fixture de referência do harness (RotaCar), versionada junto do plugin.
   repo_path: "{{PLUGIN_ROOT}}/fixture/exemplo-locadora"
   app_container: rotacar_php

@@ -20,6 +20,7 @@ from .. import astsym
 from ..catalog import register
 from ..config import get_tool_path
 from ..filters import SKIP_DIRS
+from ..profiles import resolve_profile
 from ..runner import run_process
 from ..task_types import TaskResult, TaskSpec
 from ..util import as_int, ensure_allowed, legacy_repo, looks_like_path, read_text, workspace
@@ -27,11 +28,6 @@ from ..util import as_int, ensure_allowed, legacy_repo, looks_like_path, read_te
 DEFAULT_MAX_RESULTS = 20
 DEFAULT_MAX_LINES = 200
 MAX_COLUMN_CHARS = 400
-
-_IMPORT_RE = re.compile(
-    r"^\s*(?:include|include_once|require|require_once|import|from)\b.*$",
-    re.IGNORECASE | re.MULTILINE,
-)
 
 
 # ---------------------------------------------------------------------------
@@ -309,15 +305,18 @@ def handle_outline(ctx, params):
         return TaskResult(False, f"arquivo não encontrado: {relative}", exit_code=2)
 
     text = read_text(path)
-    symbols = astsym.definitions(text, path)
-    imports = [
-        (text.count("\n", 0, match.start()) + 1, match.group(0).strip())
-        for match in _IMPORT_RE.finditer(text)
-    ]
+    try:
+        profile = resolve_profile(ctx.config)
+    except ValueError as exc:
+        return TaskResult(False, str(exc), exit_code=2)
+    symbols = astsym.definitions(
+        text, path, profile.languages, profile.definition_kinds
+    )
+    imports = astsym.extract_imports(text, path, profile.import_patterns)
 
     parts = [f"# outline: {relative} ({len(text.splitlines())} linhas)", ""]
     if imports:
-        parts.extend(["## imports", *[f"- L{line}: {item}" for line, item in imports], ""])
+        parts.extend(["## imports", *[f"- {item}" for item in imports], ""])
     parts.append("## símbolos")
     if symbols:
         for symbol in symbols:
@@ -400,7 +399,7 @@ def _candidate_files(ctx, name: str) -> list[str]:
     ]
 
 
-def _scan_definitions(ctx, name: str) -> list[dict]:
+def _scan_definitions(ctx, name: str, profile) -> list[dict]:
     root = legacy_repo(ctx)
     found: list[dict] = []
     for path in _candidate_files(ctx, name):
@@ -408,7 +407,9 @@ def _scan_definitions(ctx, name: str) -> list[dict]:
         if name not in text:
             continue
         relative = os.path.relpath(path, root).replace("\\", "/")
-        for symbol in astsym.definitions(text, path):
+        for symbol in astsym.definitions(
+            text, path, profile.languages, profile.definition_kinds
+        ):
             if symbol["name"] == name:
                 found.append({"file": relative, **symbol})
     found.sort(key=lambda item: (item["file"], item["line"]))
@@ -444,7 +445,11 @@ def handle_symbol(ctx, params):
     if kind in ("def", "both"):
         definitions = _definitions_from_skeleton(ctx, name)
         if definitions is None:
-            definitions = _scan_definitions(ctx, name)
+            try:
+                profile = resolve_profile(ctx.config)
+            except ValueError as exc:
+                return TaskResult(False, str(exc), exit_code=2)
+            definitions = _scan_definitions(ctx, name, profile)
         definitions = definitions[:limit]
 
     references: list[dict] = []

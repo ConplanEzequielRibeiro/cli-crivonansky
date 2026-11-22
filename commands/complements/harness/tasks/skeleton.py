@@ -18,7 +18,8 @@ from datetime import datetime
 
 from .. import astsym
 from ..catalog import register
-from ..filters import CODE_EXTENSIONS, iter_files, relative
+from ..filters import iter_files, relative
+from ..profiles import resolve_profile
 from ..task_types import TaskResult, TaskSpec
 from ..util import as_bool, ensure_dir, legacy_repo, read_text, workspace, write_json, write_text
 
@@ -30,10 +31,6 @@ MAX_PARSE_BYTES = 2 * 1024 * 1024
 TABLE_RE = re.compile(
     r"\b(?:FROM|JOIN|INTO|UPDATE|REPLACE\s+INTO)\s+[`\"']?([A-Za-z_][\w$]*)",
     re.IGNORECASE,
-)
-IMPORT_RE = re.compile(
-    r"^\s*(?:include|include_once|require|require_once|import|from)\b[^\n]*$",
-    re.IGNORECASE | re.MULTILINE,
 )
 _SQL_WORDS = {
     "select",
@@ -73,16 +70,11 @@ def _tables(text: str) -> list[str]:
     return sorted(found)
 
 
-def _imports(text: str) -> list[str]:
-    values = []
-    for match in IMPORT_RE.finditer(text):
-        line = match.group(0).strip()
-        if line and line not in values:
-            values.append(line[:160])
-    return values[:40]
+def _imports(text: str, path: str, profile) -> list[str]:
+    return astsym.extract_imports(text, path, profile.import_patterns)
 
 
-def _entry(path: str, repo: str) -> dict:
+def _entry(path: str, repo: str, profile) -> dict:
     size = os.path.getsize(path)
     try:
         text = read_text(path)
@@ -93,9 +85,13 @@ def _entry(path: str, repo: str) -> dict:
         "loc": text.count("\n") + (0 if text.endswith("\n") or not text else 1),
         "mtime": int(os.path.getmtime(path)),
         "size": size,
-        "symbols": astsym.definitions(text, path) if size <= MAX_PARSE_BYTES else [],
+        "symbols": (
+            astsym.definitions(text, path, profile.languages, profile.definition_kinds)
+            if size <= MAX_PARSE_BYTES
+            else []
+        ),
         "tables": _tables(text),
-        "imports": _imports(text),
+        "imports": _imports(text, path, profile),
     }
 
 
@@ -120,7 +116,14 @@ def _dir_counts(files_index: dict) -> dict[str, int]:
     return counts
 
 
-def _render(files_index: dict, tables: dict, repo: str, generated_at: str, symbols_per_file: int) -> str:
+def _render(
+    files_index: dict,
+    tables: dict,
+    repo: str,
+    generated_at: str,
+    symbols_per_file: int,
+    label: str,
+) -> str:
     dirs = _dir_counts(files_index)
     symbols = sum(len(entry.get("symbols") or []) for entry in files_index.values())
     loc = sum(int(entry.get("loc") or 0) for entry in files_index.values())
@@ -129,6 +132,7 @@ def _render(files_index: dict, tables: dict, repo: str, generated_at: str, symbo
         f"# Esqueleto: {os.path.basename(repo.rstrip(os.sep)) or repo}",
         "",
         f"- repo: `{repo}`",
+        f"- stack: {label}",
         f"- arquivos: {len(files_index)} | linhas: {loc} | símbolos: {symbols} | tabelas: {len(tables)}",
         f"- gerado em: {generated_at}",
         "",
@@ -181,14 +185,14 @@ def _render(files_index: dict, tables: dict, repo: str, generated_at: str, symbo
     return "\n".join(parts)
 
 
-def _fit(files_index: dict, tables: dict, repo: str, generated_at: str) -> tuple[str, int]:
+def _fit(files_index: dict, tables: dict, repo: str, generated_at: str, label: str) -> tuple[str, int]:
     """Reduz a quantidade de símbolos por arquivo até caber no orçamento."""
     for symbols_per_file in (12, 6, 3, 0):
-        text = _render(files_index, tables, repo, generated_at, symbols_per_file)
+        text = _render(files_index, tables, repo, generated_at, symbols_per_file, label)
         if len(text) <= SKELETON_BUDGET:
             return text, symbols_per_file
 
-    text = _render(files_index, tables, repo, generated_at, 0)
+    text = _render(files_index, tables, repo, generated_at, 0, label)
     return (
         text[:SKELETON_BUDGET]
         + "\n\n(truncado) esqueleto maior que o orçamento; use `code:outline`/`code:search`.\n",
@@ -204,6 +208,11 @@ def handle(ctx, params):
     if not os.path.isdir(repo):
         return TaskResult(False, f"repositório não encontrado: {repo}", exit_code=2)
 
+    try:
+        profile = resolve_profile(ctx.config)
+    except ValueError as exc:
+        return TaskResult(False, str(exc), exit_code=2)
+
     full = as_bool(params.get("full"))
     target = project_path(ctx)
     previous = {} if full else _load_previous(target)
@@ -214,7 +223,7 @@ def handle(ctx, params):
     skipped: dict = {}
     started = time.time()
 
-    for path in iter_files(repo, CODE_EXTENSIONS, skipped=skipped):
+    for path in iter_files(repo, profile.code_extensions, skipped=skipped):
         relative_path = relative(repo, path)
         try:
             size = os.path.getsize(path)
@@ -233,7 +242,7 @@ def handle(ctx, params):
             reused += 1
             continue
 
-        files_index[relative_path] = _entry(path, repo)
+        files_index[relative_path] = _entry(path, repo, profile)
 
     tables: dict[str, list[str]] = {}
     for relative_path, entry in files_index.items():
@@ -246,10 +255,11 @@ def handle(ctx, params):
     elapsed = time.time() - started
 
     data = {
-        "version": 1,
+        "version": 2,
         "repo": repo,
+        "stack": profile.name,
         "generated_at": generated_at,
-        "extensions": sorted(CODE_EXTENSIONS),
+        "extensions": sorted(profile.code_extensions),
         "files": len(files_index),
         "loc": sum(int(entry.get("loc") or 0) for entry in files_index.values()),
         "symbols": sum(len(entry.get("symbols") or []) for entry in files_index.values()),
@@ -260,7 +270,9 @@ def handle(ctx, params):
     }
 
     write_json(target, data)
-    markdown, symbols_per_file = _fit(files_index, tables, repo, generated_at)
+    markdown, symbols_per_file = _fit(
+        files_index, tables, repo, generated_at, profile.label
+    )
     skeleton_md = os.path.join(skeleton_dir(ctx), "SKELETON.md")
     write_text(skeleton_md, markdown)
 
