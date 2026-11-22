@@ -99,11 +99,51 @@ def ensure_dir(path: str) -> str:
     return path
 
 
-def read_text(path: str) -> str:
-    with open(path, "r", encoding="utf-8", errors="replace") as fh:
-        text = fh.read()
-    # Dumps/manuais gerados no Windows costumam vir com BOM.
+def read_text(path: str, encoding: str = "utf-8") -> str:
+    """Lê um texto tentando UTF-8 primeiro e caindo para ``encoding``/latin-1.
+
+    Dumps e fontes de legado Windows costumam vir em cp1252/latin-1 (ou com
+    BOM). A ordem UTF-8 -> configurado -> cp1252 -> latin-1 evita mojibake nos
+    dois sentidos, e latin-1 nunca falha (último recurso).
+    """
+    with open(path, "rb") as fh:
+        raw = fh.read()
+
+    text = _decode(raw, encoding)
     return text[1:] if text.startswith("\ufeff") else text
+
+
+def _decode(raw: bytes, encoding: str) -> str:
+    configured = (encoding or "utf-8").strip()
+    normalized = configured.lower().replace("_", "-")
+
+    candidates = ["utf-8"]
+    if normalized not in ("utf-8", "utf8", "auto"):
+        candidates.append(configured)
+    candidates.extend(["cp1252", "latin-1"])
+
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = candidate.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            return raw.decode(candidate)
+        except (UnicodeDecodeError, LookupError):
+            continue
+
+    return raw.decode("utf-8", errors="replace")
+
+
+def source_encoding(ctx) -> str:
+    """Encoding configurado no perfil de stack (``legacy.encoding``)."""
+    try:
+        from .profiles import resolve_profile
+
+        return resolve_profile(getattr(ctx, "config", None) or {}).encoding
+    except Exception:  # noqa: BLE001 - config inválida é tratada pela tarefa
+        return "utf-8"
 
 
 def write_text(path: str, content: str) -> None:

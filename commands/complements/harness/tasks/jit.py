@@ -23,11 +23,36 @@ from ..filters import SKIP_DIRS
 from ..profiles import resolve_profile
 from ..runner import run_process
 from ..task_types import TaskResult, TaskSpec
-from ..util import as_int, ensure_allowed, legacy_repo, looks_like_path, read_text, workspace
+from ..util import (
+    as_int,
+    ensure_allowed,
+    legacy_repo,
+    looks_like_path,
+    read_text,
+    source_encoding,
+    workspace,
+)
 
 DEFAULT_MAX_RESULTS = 20
 DEFAULT_MAX_LINES = 200
 MAX_COLUMN_CHARS = 400
+
+# Labels aceitos pelo ripgrep (encoding_rs) para os encodings comuns do legado.
+_RG_ENCODINGS = {
+    "cp1252": "windows-1252",
+    "latin-1": "windows-1252",
+    "iso-8859-1": "windows-1252",
+}
+
+
+def _rg_encoding(encoding: str | None) -> str | None:
+    """Label para ``rg --encoding``; ``None`` mantém o padrão (UTF-8)."""
+    if not encoding:
+        return None
+    key = encoding.strip().lower().replace("_", "-")
+    if key in ("utf-8", "utf8", "auto"):
+        return None
+    return _RG_ENCODINGS.get(key, encoding)
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +89,13 @@ def _excludes() -> list[str]:
     return args
 
 
-def _run_rg(ctx, pattern: str, roots: list[str], glob: str | None = None) -> object:
+def _run_rg(
+    ctx,
+    pattern: str,
+    roots: list[str],
+    glob: str | None = None,
+    encoding: str | None = None,
+) -> object:
     binary = rg_bin(ctx)
     cmd = [
         binary,
@@ -77,6 +108,9 @@ def _run_rg(ctx, pattern: str, roots: list[str], glob: str | None = None) -> obj
         "5M",
         *(_excludes()),
     ]
+    rg_encoding = _rg_encoding(encoding)
+    if rg_encoding:
+        cmd.extend(["--encoding", rg_encoding])
     if glob:
         cmd.extend(["--glob", glob])
     cmd.extend([pattern, *roots])
@@ -179,7 +213,13 @@ def handle_search(ctx, params):
         roots = [resolved]
 
     try:
-        result = _run_rg(ctx, str(pattern), roots, params.get("glob"))
+        result = _run_rg(
+            ctx,
+            str(pattern),
+            roots,
+            params.get("glob"),
+            source_encoding(ctx),
+        )
     except OSError as exc:
         return TaskResult(False, f"falha ao executar rg: {exc}", exit_code=2)
 
@@ -250,7 +290,7 @@ def handle_read(ctx, params):
         return TaskResult(False, f"arquivo não encontrado: {relative}", exit_code=2)
 
     try:
-        text = read_text(path)
+        text = read_text(path, source_encoding(ctx))
     except OSError as exc:
         return TaskResult(False, f"falha ao ler {relative}: {exc}", exit_code=2)
 
@@ -304,11 +344,12 @@ def handle_outline(ctx, params):
     if not os.path.isfile(path):
         return TaskResult(False, f"arquivo não encontrado: {relative}", exit_code=2)
 
-    text = read_text(path)
     try:
         profile = resolve_profile(ctx.config)
     except ValueError as exc:
         return TaskResult(False, str(exc), exit_code=2)
+
+    text = read_text(path, profile.encoding)
     symbols = astsym.definitions(
         text, path, profile.languages, profile.definition_kinds
     )
@@ -365,7 +406,7 @@ def _definitions_from_skeleton(ctx, name: str) -> list[dict] | None:
     return found if found else []
 
 
-def _candidate_files(ctx, name: str) -> list[str]:
+def _candidate_files(ctx, name: str, profile) -> list[str]:
     """Arquivos que contêm o nome (pré-filtro barato antes de parsear)."""
     binary = rg_bin(ctx)
     root = legacy_repo(ctx)
@@ -378,9 +419,11 @@ def _candidate_files(ctx, name: str) -> list[str]:
             "--max-filesize",
             "5M",
             *(_excludes()),
-            name,
-            root,
         ]
+        rg_encoding = _rg_encoding(profile.encoding)
+        if rg_encoding:
+            cmd.extend(["--encoding", rg_encoding])
+        cmd.extend([name, root])
         env = dict(os.environ)
         env["PYTHONIOENCODING"] = "utf-8"
         try:
@@ -395,15 +438,15 @@ def _candidate_files(ctx, name: str) -> list[str]:
     return [
         path
         for path in iter_files(root)
-        if name in read_text(path)
+        if name in read_text(path, profile.encoding)
     ]
 
 
 def _scan_definitions(ctx, name: str, profile) -> list[dict]:
     root = legacy_repo(ctx)
     found: list[dict] = []
-    for path in _candidate_files(ctx, name):
-        text = read_text(path)
+    for path in _candidate_files(ctx, name, profile):
+        text = read_text(path, profile.encoding)
         if name not in text:
             continue
         relative = os.path.relpath(path, root).replace("\\", "/")
@@ -416,11 +459,13 @@ def _scan_definitions(ctx, name: str, profile) -> list[dict]:
     return found
 
 
-def _reference_hits(ctx, name: str, max_results: int) -> tuple[list[dict], int]:
+def _reference_hits(
+    ctx, name: str, max_results: int, profile
+) -> tuple[list[dict], int]:
     if rg_bin(ctx) is None:
         return [], 0
     pattern = rf"\b{re.escape(name)}\s*\("
-    result = _run_rg(ctx, pattern, [legacy_repo(ctx)])
+    result = _run_rg(ctx, pattern, [legacy_repo(ctx)], encoding=profile.encoding)
     if getattr(result, "timed_out", False):
         return [], 0
     hits, total, _files = _matches(result.stdout)
@@ -439,23 +484,24 @@ def handle_symbol(ctx, params):
     if kind in ("ref", "both") and rg_bin(ctx) is None:
         return _unavailable(ctx)
 
+    try:
+        profile = resolve_profile(ctx.config)
+    except ValueError as exc:
+        return TaskResult(False, str(exc), exit_code=2)
+
     limit = max(1, min(as_int(params.get("max_results"), 30), 200))
 
     definitions: list[dict] = []
     if kind in ("def", "both"):
         definitions = _definitions_from_skeleton(ctx, name)
         if definitions is None:
-            try:
-                profile = resolve_profile(ctx.config)
-            except ValueError as exc:
-                return TaskResult(False, str(exc), exit_code=2)
             definitions = _scan_definitions(ctx, name, profile)
         definitions = definitions[:limit]
 
     references: list[dict] = []
     total_refs = 0
     if kind in ("ref", "both"):
-        references, total_refs = _reference_hits(ctx, name, limit)
+        references, total_refs = _reference_hits(ctx, name, limit, profile)
         definition_lines = {
             (item["file"], item["line"]) for item in definitions if item.get("line")
         }

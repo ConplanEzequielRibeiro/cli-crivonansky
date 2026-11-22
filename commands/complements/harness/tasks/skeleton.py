@@ -77,7 +77,7 @@ def _imports(text: str, path: str, profile) -> list[str]:
 def _entry(path: str, repo: str, profile) -> dict:
     size = os.path.getsize(path)
     try:
-        text = read_text(path)
+        text = read_text(path, profile.encoding)
     except OSError:
         text = ""
 

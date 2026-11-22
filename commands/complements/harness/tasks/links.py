@@ -697,7 +697,7 @@ def handle(ctx, params):
     for index, path in enumerate(files, 1):
         rel = os.path.relpath(path, root).replace("\\", "/")
 
-        text = read_text(path)
+        text = read_text(path, profile.encoding)
         bytes_read += len(text)
         progress.bytes_read = bytes_read
         index_lines = LineIndex(text)

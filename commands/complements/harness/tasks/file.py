@@ -4,7 +4,7 @@ import os
 
 from ..catalog import register
 from ..task_types import TaskResult, TaskSpec
-from ..util import as_int, as_list, ensure_allowed, read_text
+from ..util import as_int, as_list, ensure_allowed, read_text, source_encoding
 
 
 def handle_read(ctx, params):
@@ -20,7 +20,7 @@ def handle_read(ctx, params):
     if not os.path.isfile(full):
         return TaskResult(False, f"arquivo não encontrado: {path}", exit_code=2)
 
-    lines = read_text(full).splitlines()
+    lines = read_text(full, source_encoding(ctx)).splitlines()
     start = max(1, as_int(params.get("start"), 1))
     end = min(len(lines), as_int(params.get("end"), len(lines)))
     numbered = "\n".join(f"{i:>5}  {lines[i - 1]}" for i in range(start, end + 1))
@@ -51,7 +51,7 @@ def handle_pack(ctx, params):
             chunks.append(f"## {item}\n\n(não encontrado)")
             continue
 
-        content = read_text(full)
+        content = read_text(full, source_encoding(ctx))
         block = f"## {item}\n\n```\n{content}\n```"
 
         if used + len(block) > budget:

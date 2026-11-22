@@ -679,7 +679,7 @@ def handle_snapshot(ctx, params):
 
     if catalog is None and dump_path and os.path.isfile(dump_path):
         catalog = parse_dump(
-            read_text(dump_path),
+            read_text(dump_path, profile.encoding),
             database=get_legacy(ctx.config, "db_name"),
             dialect=dialect,
         )

@@ -67,7 +67,7 @@ def test_search_parses_rg_json_and_truncates(tmp_path, monkeypatch):
 
     monkeypatch.setattr(jit, "rg_bin", lambda ctx: "rg")
     monkeypatch.setattr(
-        jit, "_run_rg", lambda ctx, pattern, roots, glob=None: ProcessResult(0, stdout, "")
+        jit, "_run_rg", lambda ctx, pattern, roots, glob=None, encoding=None: ProcessResult(0, stdout, "")
     )
 
     result = jit.handle_search(ctx, {"pattern": "tb_clientes", "max_results": 1})
@@ -151,7 +151,7 @@ def test_symbol_references_use_rg(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(jit, "rg_bin", lambda ctx: "rg")
     monkeypatch.setattr(
-        jit, "_run_rg", lambda ctx, pattern, roots, glob=None: ProcessResult(0, stdout, "")
+        jit, "_run_rg", lambda ctx, pattern, roots, glob=None, encoding=None: ProcessResult(0, stdout, "")
     )
 
     result = jit.handle_symbol(ctx, {"name": "salvar_cliente", "kind": "ref"})
