@@ -23,6 +23,43 @@ code:symbol    ->  definições (ast-grep) e chamadas (ripgrep)
 O RAG é **opcional** e cobre só a camada semântica de negócio: manuais, tickets,
 schema do banco e vínculos código↔tabela (`db:links`).
 
+## Perfis de stack
+
+O recorte de arquivos, as linguagens do parser, os imports e o dialeto SQL vêm de um
+**perfil de stack** resolvido de `legacy.stack` (padrão `php-mysql`):
+
+| Perfil | Extensões | Linguagens (ast-grep) | Dialeto |
+|---|---|---|---|
+| `php-mysql` (padrão) | php, js, jsx, ts, tsx, py | php, javascript, typescript, tsx, python | mysql |
+| `java-oracle` | java, jsp | java | oracle |
+| `dotnet-sqlserver` | cs | csharp | tsql |
+| `ruby-postgres` | rb, erb | ruby | postgres |
+| `node-postgres` | js, jsx, ts, tsx, mjs, cjs | javascript, typescript, tsx | postgres |
+| `custom` | overrides | overrides | overrides |
+
+Overrides no `harness.yaml` (vencem o perfil):
+
+```yaml
+legacy:
+  stack: custom
+  extensions: [".go", ".tmpl"]
+  sql_extensions: [".go"]
+  languages: { ".go": "go" }
+  db_dialect: postgres
+  encoding: cp1252
+```
+
+Precedência: perfil → `legacy.*` → defaults do harness. Linguagens sem perfil embutido
+funcionam via `custom` (ex.: Go: `extensions: [".go"]`, `languages: {".go": "go"}`).
+
+Dialetos com snapshot/consulta **ao vivo**: `mysql`, `postgres`. Os demais usam
+`legacy.schema_dump`. Encoding: UTF-8 → `legacy.encoding` → cp1252/latin-1.
+
+Para adicionar uma linguagem: registre extensão/kinds em `profiles.py`
+(`EXTENSION_LANGUAGES`, `DEFINITION_KINDS`, `IMPORT_PATTERNS`), o fallback regex em
+`astsym.py` e, se for uma stack recorrente, um perfil novo. Linguagem fora da allowlist
+**nunca** chega ao ast-grep (ele derruba o processo com linguagem inválida).
+
 ## Estrutura
 
 ```text
@@ -295,6 +332,8 @@ harness_version: 1
 workspace: C:/projetos/harness-configs/meu-legado/workspace
 
 legacy:
+  stack: php-mysql
+  encoding: utf-8
   repo_path: C:/projetos/meu-legado
   app_container: meu_php
   db_container: meu_mysql

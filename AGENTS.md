@@ -57,6 +57,7 @@ only the semantic layer (manuals, tickets, db schema and `db:links` output).
 | `commands/complements/harness/task_types.py` | `TaskResult`/`TaskContext`/`TaskSpec` (nunca nomear de `types.py`) |
 | `commands/complements/harness/progress.py` | Progresso ao vivo das tarefas longas (sink da TUI, stderr, log) |
 | `commands/complements/harness/filters.py` | Recorte compartilhado de diretórios/arquivos do repositório legado |
+| `commands/complements/harness/profiles.py` | Perfis de stack (`legacy.stack`): extensões, linguagens, imports e dialeto SQL |
 | `commands/complements/harness/astsym.py` | Símbolos (ast-grep + fallback regex/chaves) para o esqueleto e o `db:links` |
 | `commands/complements/harness/tasks/` | Task catalog (`code:*`, `db:*`, `rag:*`, `docs:import`, `git:run`, `shell:run`, `docker:exec`, etc.) |
 
