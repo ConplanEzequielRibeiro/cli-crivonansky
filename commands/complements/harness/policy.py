@@ -4,7 +4,13 @@ import json
 import re
 
 # Tarefas que um bloco vindo do LLM nunca executa: só o usuário, digitando.
-DEFAULT_LLM_DENIED = ("shell:run", "py:run", "docker:exec")
+DEFAULT_LLM_DENIED = (
+    "shell:run",
+    "py:run",
+    "docker:exec",
+    "watch:clip",
+    "watch:downloads",
+)
 
 
 def llm_task_denied(policy: dict, task: str) -> str | None:

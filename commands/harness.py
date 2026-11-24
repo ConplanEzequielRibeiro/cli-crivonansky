@@ -23,6 +23,10 @@ class HarnessCommand(Command):
            run notes:draft --module cadastro | run notes:stale
            run patch:apply --file F --branch ajuste   (preserva encoding/CRLF)
   /harness ask "<pergunta>" [--context map,notes,db,code,docs,rag,skeleton] [--budget TOKENS]
+  /harness state save --clip | list | load [--last | NOME]   (retomar tarefa em outra conversa)
+  /harness notes draft <dir> | save --clip | stale
+  /harness watch clip [--stop] | watch downloads [--path P] [--stop]
+  /harness kb export [--out P] [--max_chars N]
   /harness prompt
   /harness tasks
   /harness runs [--last N]
@@ -43,6 +47,16 @@ class HarnessCommand(Command):
 
         sub = args[0] if args else "help"
         rest = args[1:]
+
+        # Atalhos: `state save`, `notes draft`, `watch clip`, `kb export` -> `run state:save` ...
+        if sub in ("state", "notes", "watch", "kb") and rest and not rest[0].startswith("--"):
+            action, tail = rest[0], list(rest[1:])
+            if sub == "state" and action == "load" and tail and not tail[0].startswith("--"):
+                tail = ["--name", *tail]
+            if sub == "notes" and action == "draft" and tail and not tail[0].startswith("--"):
+                tail = ["--module", *tail]
+            args = ["run", f"{sub}:{action}", *tail]
+            sub, rest = args[0], args[1:]
 
         if sub in ("help", "--help", "-h"):
             print(self.get_usage())

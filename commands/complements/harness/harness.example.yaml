@@ -61,6 +61,14 @@ output:
 #   recent_days: 180
 #   exclude: ["relatorios"]   # equivale a legacy.exclude
 
+# Monitores e exportação (watch:downloads, kb:export).
+# watch:
+#   downloads_path: "C:/Users/voce/Downloads"
+#   patch_branch: ajuste-chat
+# kb:
+#   export_path: "D:/kb_export"
+#   max_chars: 200000
+
 # Fichas de conhecimento (repositório git próprio, fora do workspace).
 # Sem este campo: workspace/knowledge/notes/
 # knowledge:

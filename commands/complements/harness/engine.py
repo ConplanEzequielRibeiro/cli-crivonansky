@@ -38,8 +38,9 @@ class HarnessEngine:
         yes: bool = False,
         dry_run: bool = False,
         sinks: list[str] | None = None,
+        config: dict | None = None,
     ):
-        self.config = load_config(config_path)
+        self.config = config if config is not None else load_config(config_path)
         self.workspace = get_workspace(self.config)
         self.output = get_output(self.config)
         self.interactive = interactive

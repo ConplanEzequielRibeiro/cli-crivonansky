@@ -31,6 +31,7 @@ def load_tasks() -> None:
         file,
         git,
         jit,
+        kb,
         links,
         notes,
         patch,
@@ -40,6 +41,8 @@ def load_tasks() -> None:
         rag_serve,
         shell,
         skeleton,
+        state,
+        watch,
     )
 
     _loaded = True
