@@ -19,6 +19,9 @@ class HarnessCommand(Command):
   /harness config
   /harness exec --clip | --file F | --stdin [--yes] [--dry-run]
   /harness run <task> [--param k=v ...] [--yes] [--dry-run]
+      ex.: run code:skeleton --level map | run code:skeleton --level dir --path cadastro
+           run notes:draft --module cadastro | run notes:stale
+           run patch:apply --file F --branch ajuste   (preserva encoding/CRLF)
   /harness ask "<pergunta>" [--context skeleton,code,db,docs,rag]
   /harness prompt
   /harness tasks
@@ -292,6 +295,14 @@ class HarnessCommand(Command):
 
         prompt = "\n".join(parts)
 
+        from .complements.harness import redact
+
+        policy = redact.get_policy(engine.config)
+        if redact.applies(policy, "ask"):
+            prompt, stats = redact.redact_text(prompt, policy)
+            if stats:
+                prompt += f"\n\n[redact: {redact.format_stats(stats)}]\n"
+
         copied = False
         try:
             import pyperclip
@@ -338,7 +349,13 @@ class HarnessCommand(Command):
 
         text = "\n\n".join(blocks)
         if len(text) > max_chars:
-            text = text[:max_chars] + "\n\n...(contexto do banco truncado)"
+            from .complements.harness.formatter import cut_head
+
+            text, _omitted = cut_head(
+                text,
+                max_chars,
+                hint="Use `db:schema table=<nome>` para uma tabela específica.",
+            )
         return text
 
     def _skeleton_context(self, engine, max_chars: int = 20000) -> str:
@@ -354,7 +371,13 @@ class HarnessCommand(Command):
         except OSError as exc:  # noqa: BLE001
             return f"(falha ao ler o esqueleto: {exc})"
         if len(text) > max_chars:
-            text = text[:max_chars] + "\n\n...(esqueleto truncado; use code:outline)"
+            from .complements.harness.formatter import cut_head
+
+            text, _omitted = cut_head(
+                text,
+                max_chars,
+                hint="Use `code:skeleton level=map` ou `level=dir path=<diretório>`.",
+            )
         return text
 
     def _docs_context(self, engine, max_chars: int = 4000) -> str:
@@ -379,7 +402,11 @@ class HarnessCommand(Command):
             return "(nenhum arquivo no manifesto)"
         text = "\n".join(lines)
         if len(text) > max_chars:
-            text = text[:max_chars] + "\n...(lista truncada)"
+            from .complements.harness.formatter import cut_head
+
+            text, _omitted = cut_head(
+                text, max_chars, hint="Use `rag:search` para localizar um manual."
+            )
         return text
 
     def _identifier(self, question: str) -> str | None:
@@ -502,7 +529,7 @@ class HarnessCommand(Command):
                     key, _, value = args[index].partition("=")
                     params[key] = value
             elif item.startswith("--"):
-                key = item[2:]
+                key = item[2:].replace("-", "_")
                 if index + 1 < len(args) and not args[index + 1].startswith("--"):
                     params[key] = args[index + 1]
                     index += 1
