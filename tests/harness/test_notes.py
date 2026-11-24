@@ -22,11 +22,11 @@ def _ctx(tmp_path, knowledge=None):
 def repo(tmp_path):
     folder = tmp_path / "repo" / "cadastro"
     folder.mkdir(parents=True)
-    (folder / "veiculo.php").write_text(
-        '<?php\r\nfunction salvar_veiculo() {\r\n mysql_query("SELECT * FROM tb_veiculos");\r\n}\r\n',
-        encoding="utf-8",
+    # write_bytes: no Windows, write_text traduz "\n" para "\r\n" e duplicaria o CR.
+    (folder / "veiculo.php").write_bytes(
+        b'<?php\r\nfunction salvar_veiculo() {\r\n mysql_query("SELECT * FROM tb_veiculos");\r\n}\r\n'
     )
-    (folder / "marca.php").write_text("<?php\r\nfunction listar_marcas() {}\r\n", encoding="utf-8")
+    (folder / "marca.php").write_bytes(b"<?php\r\nfunction listar_marcas() {}\r\n")
     return tmp_path / "repo"
 
 
