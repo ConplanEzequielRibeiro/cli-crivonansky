@@ -25,10 +25,12 @@ from .. import astsym
 from ..catalog import register
 from ..filters import config_excludes, iter_files, relative
 from ..formatter import cut_head
+from ..runner import run_process
 from ..profiles import resolve_profile
 from ..task_types import TaskResult, TaskSpec
 from ..util import (
     as_bool,
+    as_int,
     as_list,
     ensure_dir,
     legacy_repo,
@@ -291,8 +293,28 @@ def _inbound(files_index: dict) -> dict[str, int]:
     return counts
 
 
-def rank_files(files_index: dict) -> dict[str, float]:
-    """Relevância: tabelas citadas, quem inclui o arquivo, símbolos e tamanho."""
+def recent_commits(repo: str, days: int = 180) -> dict[str, int]:
+    """Commits recentes por arquivo (``git log``); vazio se não houver git."""
+    if days <= 0 or not os.path.isdir(os.path.join(repo, ".git")):
+        return {}
+    result = run_process(
+        ["git", "log", f"--since={int(days)}.days", "--name-only", "--pretty=format:"],
+        cwd=repo,
+        timeout=60,
+    )
+    if result.exit_code != 0:
+        return {}
+    counts: dict[str, int] = {}
+    for line in result.stdout.splitlines():
+        line = line.strip().replace("\\", "/")
+        if line:
+            counts[line] = counts.get(line, 0) + 1
+    return counts
+
+
+def rank_files(files_index: dict, recent: dict | None = None) -> dict[str, float]:
+    """Relevância: tabelas, includes recebidos, símbolos, tamanho e commits recentes."""
+    recent = recent or {}
     inbound = _inbound(files_index)
     scores: dict[str, float] = {}
     for relative_path, entry in files_index.items():
@@ -301,12 +323,15 @@ def rank_files(files_index: dict) -> dict[str, float]:
             + 2 * inbound.get(relative_path, 0)
             + len(entry.get("symbols") or [])
             + min(int(entry.get("loc") or 0), 2000) / 200
+            + 1.5 * min(recent.get(relative_path, 0), 10)
         )
     return scores
 
 
-def _render_map(files_index: dict, tables: dict, generated_at: str) -> str:
-    scores = rank_files(files_index)
+def _render_map(
+    files_index: dict, tables: dict, generated_at: str, recent: dict | None = None
+) -> str:
+    scores = rank_files(files_index, recent)
     grouped = _by_dir(files_index)
     parts = [
         "# Mapa do código",
@@ -349,9 +374,17 @@ def _fit_text(text: str, budget: int, hint: str) -> str:
     return cut
 
 
-def _fit(files_index: dict, tables: dict, repo: str, generated_at: str, label: str) -> tuple[str, int]:
+def _fit(
+    files_index: dict,
+    tables: dict,
+    repo: str,
+    generated_at: str,
+    label: str,
+    max_symbols: int = 12,
+) -> tuple[str, int]:
     """SKELETON.md: completo se couber; senão, índice enxuto (nunca cortado ao meio)."""
-    for symbols_per_file in (12, 6, 3):
+    steps = [max_symbols] + [n for n in (12, 6, 3) if n < max_symbols]
+    for symbols_per_file in steps:
         text = _render(files_index, tables, repo, generated_at, symbols_per_file, label)
         if len(text) <= SKELETON_BUDGET:
             return text, symbols_per_file
@@ -468,14 +501,25 @@ def handle(ctx, params):
     }
 
     write_json(target, data)
+    skeleton_cfg = ctx.config.get("skeleton") or {}
     markdown, symbols_per_file = _fit(
-        files_index, tables, repo, generated_at, profile.label
+        files_index,
+        tables,
+        repo,
+        generated_at,
+        profile.label,
+        max_symbols=max(as_int(skeleton_cfg.get("max_symbols"), 12), 1),
     )
     skeleton_md = os.path.join(skeleton_dir(ctx), "SKELETON.md")
     write_text(skeleton_md, markdown)
     map_md = os.path.join(skeleton_dir(ctx), "MAP.md")
     map_text = _fit_text(
-        _render_map(files_index, tables, generated_at),
+        _render_map(
+            files_index,
+            tables,
+            generated_at,
+            recent_commits(repo, as_int(skeleton_cfg.get("recent_days"), 180)),
+        ),
         MAP_BUDGET,
         "Use `code:skeleton level=dir path=<diretório>` para um diretório específico.",
     )

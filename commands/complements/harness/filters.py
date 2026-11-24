@@ -39,6 +39,7 @@ def config_excludes(config: dict | None, extra=None) -> list[str]:
 
     legacy = (config or {}).get("legacy") or {}
     patterns = [str(item) for item in as_list(legacy.get("exclude"))]
+    patterns += [str(item) for item in as_list(((config or {}).get("skeleton") or {}).get("exclude"))]
     patterns += [str(item) for item in as_list(extra)]
     return [item.replace("\\", "/").strip("/") for item in patterns if item]
 

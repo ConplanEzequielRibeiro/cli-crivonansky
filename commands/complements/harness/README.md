@@ -363,7 +363,9 @@ Campos relevantes:
 | `legacy.languages` | `code:skeleton`, `code:outline` | Extensão → linguagem do ast-grep (ex.: `".phtml": "php"`) |
 | `legacy.db_dialect` | `db:snapshot`, `db:links` | Sobrepõe o dialeto do perfil |
 | `legacy.repo_path` | `code:*`, `db:links`, `git:run`, hooks | Repositório legado |
-| `legacy.exclude` | `code:skeleton`, `db:links` | Globs excluídos da varredura |
+| `legacy.exclude` / `skeleton.exclude` | `code:skeleton`, `db:links` | Globs excluídos da varredura |
+| `skeleton.max_symbols` / `recent_days` | `code:skeleton` | Símbolos por arquivo no SKELETON.md; janela de commits do ranking |
+| `output.ask_context` / `ask_budget` / `token_chars` | `ask` | Contextos padrão (`map,notes,db`), orçamento em tokens e caracteres por token |
 | `knowledge.notes_path` | `notes:*`, `code:search scope=notes` | Repositório git das fichas; entra em `allowed_roots` |
 | `policy.redact.*` | todas as saídas | `enabled`, `patterns`, `columns`, `secrets`, `apply_to`, `keep_raw_log` |
 | `policy.llm_denied_tasks` / `llm_allowed_tasks` | blocos do LLM | Padrão nega `shell:run`, `py:run`, `docker:exec` |

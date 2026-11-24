@@ -77,7 +77,9 @@ def handle_draft(ctx, params):
             exit_code=2,
         )
 
-    scores = skeleton.rank_files(files_index)
+    scores = skeleton.rank_files(
+        files_index, skeleton.recent_commits(legacy_repo(ctx))
+    )
     limit = 15
     ranked = sorted(selected, key=lambda path: (-scores.get(path, 0), path))
     chosen = sorted(ranked[:limit])
