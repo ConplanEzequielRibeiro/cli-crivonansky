@@ -32,6 +32,7 @@ def load_tasks() -> None:
         git,
         jit,
         links,
+        notes,
         patch,
         pipelines,
         prompt,

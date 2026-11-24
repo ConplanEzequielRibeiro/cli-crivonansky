@@ -253,7 +253,7 @@ workspace/knowledge/
 
 | Tarefa | Intent | Descrição |
 |---|---|---|
-| `code:skeleton` | read | Esqueleto do código (símbolos, tabelas, imports); incremental |
+| `code:skeleton` | read | Esqueleto em níveis (índice, `level=map`, `level=dir path=`); incremental |
 | `code:search` | read | Busca textual (ripgrep) no repositório ou notas |
 | `code:read` | read | Lê um intervalo de linhas |
 | `code:outline` | read | Imports + assinaturas de um arquivo |
@@ -274,11 +274,62 @@ workspace/knowledge/
 | `py:run` | write | Script/módulo Python |
 | `docker:exec` | write | Comando no contêiner |
 | `logs:tail` | read | Logs de contêiner |
-| `patch:apply` | write | Aplica diff e verifica |
+| `patch:apply` | write | Aplica diff preservando encoding/CRLF/BOM; exige branch não protegida |
+| `notes:draft` | read | Rascunho de ficha de módulo (frontmatter + seções) |
+| `notes:save` | write | Valida e grava a ficha em `notes_path` (mostra diff) |
+| `notes:stale` | read | Fichas cujos arquivos de origem mudaram |
 | `test:run` / `verify` / `lint` | read | Pipelines do `harness.yaml` |
 | `prompt` | read | Prompt do LLM no clipboard |
 
-Tarefas `write` pedem confirmação. Blocos vindos do LLM nunca aceitam `--yes`.
+Tarefas `write` pedem confirmação. Blocos vindos do LLM nunca aceitam `--yes` e **não
+executam** `shell:run`, `py:run` e `docker:exec` (só o usuário, pela linha de comando;
+configurável em `policy.llm_denied_tasks` / `policy.llm_allowed_tasks`).
+
+## Esqueleto em níveis e fichas
+
+`code:skeleton` grava em `workspace/knowledge/skeleton/`:
+
+| Arquivo | Conteúdo |
+|---|---|
+| `project.json` | índice completo (símbolos, tabelas, imports) |
+| `SKELETON.md` | repo pequeno: símbolos inline; repo grande: índice (diretórios + tabelas), dentro de 16.000 caracteres |
+| `MAP.md` | por diretório, os 5 arquivos mais relevantes (tabelas, includes recebidos, símbolos, tamanho) |
+| `dirs/<dir>.md` | símbolos de cada diretório, lidos sob demanda |
+
+```text
+code:skeleton                              # gera tudo (incremental)
+code:skeleton --level map                  # devolve o MAP.md
+code:skeleton --level dir --path cadastro  # símbolos de cadastro/ (e subpastas)
+code:skeleton --exclude "relatorios,*_old.php"
+```
+
+Exclusões permanentes em `legacy.exclude` (globs de diretório, caminho ou nome); valem
+para `code:skeleton` e `db:links`. Toda saída cortada traz `[truncado: N … — dica]`.
+
+**Fichas** são Markdown com frontmatter (`modulo`, `tags`, `tabelas`, `arquivos`,
+`hash_fonte`, `revisado`, `atualizado_em`) e seis seções fixas. Ficam em
+`knowledge.notes_path` (repositório git próprio; padrão `workspace/knowledge/notes/`).
+Fluxo: `notes:draft --module cadastro` → completar no chat → `notes:save --clip` →
+`notes:stale` (roda no hook pós-commit) lista as fichas cujos arquivos mudaram.
+`notes:save` não faz commit; você revisa o diff no repositório de notas.
+
+## Privacidade (`policy.redact`)
+
+Antes de ir para o clipboard/stdout (`exec`, `ask`, `context:pack`), o harness mascara
+CPF/CNPJ (com dígitos verificadores), e-mail, telefone e segredos (`senha`, `token`,
+`mysql_connect(..., 'senha')`, `.env`, chaves privadas). Em `db:query`, colunas listadas em
+`policy.redact.columns` saem como `[MASCARADO]` (se não for possível identificar a coluna,
+a consulta é negada). O resumo informa `[redact: cpf=2, …]`; o log bruto só é guardado
+com `policy.redact.keep_raw_log: true`.
+
+## `patch:apply` e o encoding do legado
+
+O diff do chat é UTF-8/LF; o harness lê o formato real de cada arquivo alvo (encoding de
+`legacy.encoding`, CRLF/LF, BOM) e reescreve o diff nele antes do `git apply`; se o
+resultado mudar o formato, o patch é revertido. Parâmetros: `branch` (cria/usa a branch),
+`allow_dirty`, `strip`, `verify`. Branches de `patch.protected_branches` (padrão: main,
+master, develop, production, producao) exigem `branch`. Arquivos tocados precisam estar
+limpos no git.
 
 ## Progresso das tarefas longas
 
@@ -312,6 +363,11 @@ Campos relevantes:
 | `legacy.languages` | `code:skeleton`, `code:outline` | Extensão → linguagem do ast-grep (ex.: `".phtml": "php"`) |
 | `legacy.db_dialect` | `db:snapshot`, `db:links` | Sobrepõe o dialeto do perfil |
 | `legacy.repo_path` | `code:*`, `db:links`, `git:run`, hooks | Repositório legado |
+| `legacy.exclude` | `code:skeleton`, `db:links` | Globs excluídos da varredura |
+| `knowledge.notes_path` | `notes:*`, `code:search scope=notes` | Repositório git das fichas; entra em `allowed_roots` |
+| `policy.redact.*` | todas as saídas | `enabled`, `patterns`, `columns`, `secrets`, `apply_to`, `keep_raw_log` |
+| `policy.llm_denied_tasks` / `llm_allowed_tasks` | blocos do LLM | Padrão nega `shell:run`, `py:run`, `docker:exec` |
+| `patch.protected_branches` / `allow_dirty` | `patch:apply` | Branches que exigem `branch`; aceitar árvore suja |
 | `legacy.app_container` | `docker:exec`, `logs:tail`, pipelines | Contêiner da aplicação |
 | `legacy.db_container` | `db:snapshot` live, `db:query` | Contêiner MySQL |
 | `legacy.db_name` | `db:snapshot`, `db:query` | Banco consultado |

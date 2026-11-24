@@ -5,6 +5,7 @@ Centraliza o recorte de diretórios/arquivos ignorados para que o esqueleto
 exatamente o mesmo conjunto de arquivos.
 """
 
+import fnmatch
 import os
 import re
 
@@ -32,21 +33,59 @@ CODE_EXTENSIONS = {".php", ".js", ".ts", ".jsx", ".tsx", ".py"}
 ARTIFACT_RE = re.compile(r"\.(?:min|bundle|pack)\.js$", re.I)
 
 
+def config_excludes(config: dict | None, extra=None) -> list[str]:
+    """Padrões de exclusão: ``legacy.exclude`` da config + ``extra`` (parâmetro)."""
+    from .util import as_list
+
+    legacy = (config or {}).get("legacy") or {}
+    patterns = [str(item) for item in as_list(legacy.get("exclude"))]
+    patterns += [str(item) for item in as_list(extra)]
+    return [item.replace("\\", "/").strip("/") for item in patterns if item]
+
+
+def is_excluded(rel_path: str, patterns: list[str]) -> bool:
+    """Casa ``rel_path`` (``/``) com globs de caminho, de nome ou de diretório.
+
+    ``legado/*`` ou ``relatorios`` excluem a árvore; ``*.bak.php`` exclui por nome.
+    """
+    if not patterns:
+        return False
+    rel_path = rel_path.replace("\\", "/").strip("/")
+    name = rel_path.rsplit("/", 1)[-1]
+    for pattern in patterns:
+        if (
+            fnmatch.fnmatch(rel_path, pattern)
+            or fnmatch.fnmatch(name, pattern)
+            or rel_path.startswith(pattern + "/")
+            or fnmatch.fnmatch(rel_path, pattern + "/*")
+        ):
+            return True
+    return False
+
+
 def iter_files(
     root: str,
     extensions: set[str] | None = None,
     max_bytes: int = 0,
     skipped: dict | None = None,
+    exclude: list[str] | None = None,
 ):
     """Percorre ``root`` devolvendo apenas fontes de código (sem terceiros).
 
     ``skipped`` (opcional) acumula contadores usados nos relatórios das tarefas.
+    ``exclude`` são globs (ver ``is_excluded``) para podar diretórios/arquivos.
     """
     skipped = skipped if skipped is not None else {}
     wanted = extensions or CODE_EXTENSIONS
+    exclude = exclude or []
 
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(name for name in dirnames if name.lower() not in SKIP_DIRS)
+        dirnames[:] = sorted(
+            name
+            for name in dirnames
+            if name.lower() not in SKIP_DIRS
+            and not (exclude and is_excluded(relative(root, os.path.join(dirpath, name)), exclude))
+        )
 
         for filename in sorted(filenames):
             extension = os.path.splitext(filename)[1].lower()
@@ -57,6 +96,9 @@ def iter_files(
                 continue
 
             path = os.path.join(dirpath, filename)
+            if exclude and is_excluded(relative(root, path), exclude):
+                skipped["excluded"] = skipped.get("excluded", 0) + 1
+                continue
             if max_bytes:
                 try:
                     if os.path.getsize(path) > max_bytes:

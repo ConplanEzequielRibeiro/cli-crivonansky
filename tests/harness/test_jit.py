@@ -75,7 +75,7 @@ def test_search_parses_rg_json_and_truncates(tmp_path, monkeypatch):
     assert result.success
     assert "2 ocorrência(s)" in result.summary
     assert "cadastro/cliente.php:4" in result.details
-    assert "(truncado)" in result.details
+    assert "[truncado: 1 ocorrência(s) omitida(s)" in result.details
 
 
 def test_read_slices_lines_with_numbers(tmp_path):

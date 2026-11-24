@@ -104,7 +104,7 @@ def test_skeleton_truncates_markdown_over_budget(tmp_path, monkeypatch):
     text = (tmp_path / "ws" / "knowledge" / "skeleton" / "SKELETON.md").read_text(
         encoding="utf-8"
     )
-    assert "(truncado)" in text
+    assert "[truncado:" in text
 
 
 def test_skeleton_uses_stack_profile(tmp_path):

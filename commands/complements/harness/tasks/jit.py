@@ -16,10 +16,11 @@ import os
 import re
 import shutil
 
-from .. import astsym
+from .. import astsym, redact
 from ..catalog import register
 from ..config import get_tool_path
 from ..filters import SKIP_DIRS
+from ..formatter import truncation_marker
 from ..profiles import resolve_profile
 from ..runner import run_process
 from ..task_types import TaskResult, TaskSpec
@@ -28,6 +29,7 @@ from ..util import (
     ensure_allowed,
     legacy_repo,
     looks_like_path,
+    notes_path,
     read_text,
     source_encoding,
     workspace,
@@ -170,7 +172,7 @@ def _display_path(path: str, roots: list[str]) -> str:
 def _search_root(ctx, scope: str) -> list[str]:
     roots: list[str] = []
     if scope in ("notes", "all"):
-        notes = os.path.join(workspace(ctx), "knowledge", "notes")
+        notes = notes_path(ctx)
         if os.path.isdir(notes):
             roots.append(notes)
     if scope in ("repo", "all"):
@@ -254,14 +256,17 @@ def handle_search(ctx, params):
         "",
     ]
     for hit in shown:
-        lines.append(
-            f"{_display_path(hit['path'], roots)}:{hit['line']}: {hit['text'][:MAX_COLUMN_CHARS]}"
-        )
+        text = redact.redact_source(hit["text"][:MAX_COLUMN_CHARS], ctx.config)
+        lines.append(f"{_display_path(hit['path'], roots)}:{hit['line']}: {text}")
     if total > len(shown):
         lines.extend(
             [
                 "",
-                f"(truncado) {len(shown)} de {total}. Refine o pattern, use `path` ou `glob`.",
+                truncation_marker(
+                    total - len(shown),
+                    "Refine o pattern ou use `path`, `glob` ou `max_results`.",
+                    unit="ocorrência(s)",
+                ),
             ]
         )
 
@@ -270,6 +275,7 @@ def handle_search(ctx, params):
         f"{total} ocorrência(s) em {len(files)} arquivo(s)"
         + (f" (mostrando {len(shown)})" if total > len(shown) else ""),
         details="\n".join(lines),
+        hint="Refine o pattern ou use `path`, `glob` ou `max_results`.",
     )
 
 
@@ -294,6 +300,7 @@ def handle_read(ctx, params):
     except OSError as exc:
         return TaskResult(False, f"falha ao ler {relative}: {exc}", exit_code=2)
 
+    text = redact.redact_source(text, ctx.config)
     lines = text.splitlines()
     total = len(lines)
     start = max(1, as_int(params.get("start"), 1))
@@ -315,9 +322,9 @@ def handle_read(ctx, params):
 
     truncated = end < total and requested_end > end
     if truncated:
-        details += (
-            f"\n\n(truncado) mostrando {end - start + 1} linha(s) "
-            f"de {total}; peça `start`/`end` para continuar."
+        details += "\n\n" + truncation_marker(
+            total - end,
+            f"Peça `start={end + 1}` (e `end`) para continuar.",
         )
 
     return TaskResult(
@@ -325,6 +332,7 @@ def handle_read(ctx, params):
         f"{relative}:{start}-{end} de {total} linha(s)",
         details=details,
         artifacts=[path],
+        hint="Peça `start`/`end` para ler o trecho seguinte.",
     )
 
 
@@ -511,7 +519,13 @@ def handle_symbol(ctx, params):
             relative = os.path.relpath(hit["path"], root).replace("\\", "/")
             if (relative, hit["line"]) in definition_lines:
                 continue
-            filtered.append({**hit, "file": relative})
+            filtered.append(
+                {
+                    **hit,
+                    "file": relative,
+                    "text": redact.redact_source(hit["text"], ctx.config),
+                }
+            )
         total_refs = max(0, total_refs - (len(references) - len(filtered)))
         references = filtered
 
@@ -537,7 +551,14 @@ def handle_symbol(ctx, params):
             parts.append("- (nenhuma chamada encontrada)")
         if total_refs > len(references):
             parts.extend(
-                ["", f"(truncado) {len(references)} de {total_refs}; refine ou use `path`."]
+                [
+                    "",
+                    truncation_marker(
+                        total_refs - len(references),
+                        "Refine com `max_results` ou use `code:search` com `path`.",
+                        unit="referência(s)",
+                    ),
+                ]
             )
 
     summary = f"{len(definitions)} definição(ões)"

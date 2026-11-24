@@ -9,7 +9,10 @@ legacy:
   # ruby-postgres, node-postgres ou custom (com overrides abaixo).
   stack: php-mysql
   # Encoding dos fontes. Legado Windows costuma ser cp1252/latin-1.
+  # Também é o encoding de caracteres novos em patch:apply.
   encoding: utf-8
+  # Globs excluídos de code:skeleton e db:links (diretório, caminho ou nome).
+  # exclude: ["relatorios", "*_old.php", "*_bkp.php", "*.bak.php"]
   # Overrides opcionais sobre o perfil:
   # extensions: [".php", ".phtml"]
   # sql_extensions: [".php"]
@@ -47,8 +50,13 @@ output:
   # Limite de saltos (busca -> leitura -> símbolo) por pergunta.
   max_hops: 6
 
+# Fichas de conhecimento (repositório git próprio, fora do workspace).
+# Sem este campo: workspace/knowledge/notes/
+# knowledge:
+#   notes_path: "D:/conhecimento/sgg-notas"
+
 hooks:
-  tasks: ["code:skeleton"]
+  tasks: ["code:skeleton", "notes:stale"]
   log: runs/hooks.log
 
 policy:
@@ -59,9 +67,26 @@ policy:
     - '(?i)\brm\s+-rf\s+/'
     - '(?i)Remove-Item\b.*-Recurse.*\b(C:\\|\\\\)'
     - '(?i)\bgit\s+push\b.*--force'
+  # Blocos colados do chat não executam estas tarefas (padrão abaixo).
+  # llm_denied_tasks: [shell:run, py:run, docker:exec]
+  # llm_allowed_tasks: [code:read, code:search]   # se definido, só estas
+  redact:
+    enabled: true
+    patterns: [cpf, cnpj, email, telefone]
+    # Colunas mascaradas em db:query (globs tabela.coluna; sem ponto = qualquer tabela).
+    columns: ["cpf", "cnpj", "email", "*.senha", "*.telefone"]
+    # Nomes extras tratados como segredo, além de senha/token/api_key...
+    secrets: []
+    apply_to: [exec, ask, "context:pack"]
+    keep_raw_log: false
   allowed_roots:
     - "{{PLUGIN_ROOT}}/fixture/exemplo-locadora"
     - "{{PLUGIN_ROOT}}/workspace"
+
+patch:
+  protected_branches: [main, master, develop, production, producao]
+  allow_dirty: false
+  new_file_eol: auto   # auto (vizinhos) | lf | crlf
 
 pipelines:
   verify:

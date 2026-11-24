@@ -136,6 +136,19 @@ def _add_profile_info(info: dict, config: dict) -> None:
     except Exception:  # noqa: BLE001
         return
 
+    try:
+        from types import SimpleNamespace
+
+        from .filters import config_excludes
+        from .util import notes_path
+
+        info["exclude"] = ", ".join(config_excludes(config)) or "(nenhum)"
+        notes_dir = notes_path(SimpleNamespace(config=config, workspace=workspace))
+        info["notes_path"] = notes_dir
+        info["notes_path_exists"] = os.path.isdir(notes_dir)
+    except Exception:  # noqa: BLE001 - informativo
+        pass
+
     skeleton = os.path.join(workspace, "knowledge", "skeleton", "project.json")
     if not os.path.isfile(skeleton):
         info["skeleton"] = "(nao gerado)"

@@ -7,6 +7,7 @@ import traceback
 from .catalog import get_task, load_tasks
 from .config import get_output, get_workspace, load_config
 from .contract import ContractError, extract_blocks, new_id, parse_block
+from . import redact
 from .formatter import format_result, mask_secrets
 from .policy import check_policy
 from .runs import RunStore
@@ -50,7 +51,9 @@ class HarnessEngine:
         load_tasks()
 
     # ------------------------------------------------------------------
-    def handle_text(self, text: str, yes_allowed: bool = False) -> tuple[list[dict], str | None]:
+    def handle_text(
+        self, text: str, yes_allowed: bool = False, origin: str | None = None
+    ) -> tuple[list[dict], str | None]:
         blocks = extract_blocks(text)
         if not blocks:
             return [], "nenhum bloco ```crivonansky encontrado"
@@ -61,7 +64,9 @@ class HarnessEngine:
 
         results = []
         for raw in blocks:
-            result_text, status = self.handle_block(raw, yes_allowed=yes_allowed)
+            result_text, status = self.handle_block(
+                raw, yes_allowed=yes_allowed, origin=origin
+            )
             results.append({"text": result_text, "status": status})
 
             if status in ("failure", "error", "denied", "timeout"):
@@ -76,8 +81,11 @@ class HarnessEngine:
         return results, None
 
     # ------------------------------------------------------------------
-    def handle_block(self, raw: str, yes_allowed: bool = False) -> tuple[str, str]:
+    def handle_block(
+        self, raw: str, yes_allowed: bool = False, origin: str | None = None
+    ) -> tuple[str, str]:
         start = time.time()
+        origin = origin or ("user" if yes_allowed else "llm")
         generated_id = new_id()
 
         try:
@@ -131,21 +139,11 @@ class HarnessEngine:
             )
 
         decision, reason = check_policy(
-            block, spec, self.config, self.interactive, yes_allowed, self.yes
+            block, spec, self.config, self.interactive, yes_allowed, self.yes, origin
         )
         if decision == "deny":
             return self._finish(
                 block.id, block.task, "denied", 3, start, f"negado: {reason}", "", [], raw
-            )
-
-        if decision == "confirm" and not self._confirm(block):
-            return self._finish(
-                block.id, block.task, "denied", 3, start, "recusado pelo usuário", "", [], raw
-            )
-
-        if self.dry_run:
-            return self._finish(
-                block.id, block.task, "success", 0, start, "dry-run: não executado", "", [], raw
             )
 
         ctx = TaskContext(
@@ -155,7 +153,20 @@ class HarnessEngine:
             interactive=self.interactive,
             yes=self.yes,
             dry_run=self.dry_run,
+            origin=origin,
         )
+
+        if decision == "confirm":
+            preview = self._preview(spec, ctx, block)
+            if not self._confirm(block, preview):
+                return self._finish(
+                    block.id, block.task, "denied", 3, start, "recusado pelo usuário", "", [], raw
+                )
+
+        if self.dry_run:
+            return self._finish(
+                block.id, block.task, "success", 0, start, "dry-run: não executado", "", [], raw
+            )
 
         try:
             result = spec.handler(ctx, block.params)
@@ -185,12 +196,24 @@ class HarnessEngine:
             result.details,
             result.artifacts,
             raw,
+            result.hint,
         )
 
     # ------------------------------------------------------------------
-    def _confirm(self, block) -> bool:
+    def _preview(self, spec, ctx, block) -> str | None:
+        """Texto exibido antes da confirmação (ex.: diff da ficha a gravar)."""
+        if spec.preview_fn is None:
+            return None
+        try:
+            return spec.preview_fn(ctx, block.params)
+        except Exception as exc:  # noqa: BLE001 - a prévia nunca impede a tarefa
+            return f"(prévia indisponível: {exc})"
+
+    def _confirm(self, block, preview: str | None = None) -> bool:
         print(f"\n[harness] tarefa de escrita: {block.task}")
         print(json.dumps(block.params, ensure_ascii=False, indent=2))
+        if preview:
+            print(preview)
         try:
             answer = input("Executar? [y/N] ").strip().lower()
         except EOFError:
@@ -208,10 +231,23 @@ class HarnessEngine:
         details: str,
         artifacts: list[str],
         raw: str,
+        hint: str = "",
     ) -> tuple[str, str]:
         duration = int((time.time() - start) * 1000)
         summary = mask_secrets(summary, self.config)
         details = mask_secrets(details, self.config)
+        raw_details = details
+
+        policy = redact.get_policy(self.config)
+        if redact.applies(policy, "exec") or (
+            task == "context:pack" and redact.applies(policy, "context:pack")
+        ):
+            stats: dict = {}
+            details, stats = redact.redact_text(details, policy, stats)
+            summary, stats = redact.redact_text(summary, policy, stats)
+            if stats:
+                summary = f"{summary} [redact: {redact.format_stats(stats)}]"
+        full_log = raw_details if policy.keep_raw_log else details
 
         text, _truncated = format_result(
             block_id,
@@ -223,10 +259,11 @@ class HarnessEngine:
             details,
             artifacts,
             self.max_chars,
+            hint,
         )
 
         try:
-            self.runs.write(block_id, raw, text, details)
+            self.runs.write(block_id, raw, text, full_log)
             self.runs.append_index(
                 {
                     "id": block_id,
