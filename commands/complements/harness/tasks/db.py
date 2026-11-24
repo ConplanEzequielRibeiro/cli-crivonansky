@@ -7,6 +7,7 @@ import re
 import sqlglot
 from sqlglot import exp
 
+from .. import redact
 from ..catalog import register
 from ..config import get_legacy, get_legacy_path
 from ..profiles import resolve_profile
@@ -742,6 +743,88 @@ def handle_schema(ctx, params):
     return TaskResult(True, f"schema da tabela {table_name}", details=markdown)
 
 
+def _catalog_columns(ctx) -> dict[str, list[str]]:
+    """Colunas por tabela (minúsculas) do ``schema-catalog.json``."""
+    try:
+        with open(_catalog_path(ctx), "r", encoding="utf-8") as fh:
+            catalog = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+    columns: dict[str, list[str]] = {}
+    for table in catalog.get("tables") or []:
+        name = str(table.get("name") or "").lower()
+        if name:
+            columns[name] = [str(col.get("name")) for col in table.get("columns") or []]
+    return columns
+
+
+def _masked_columns(ctx, select, rules) -> tuple[set[int], int, str | None]:
+    """Índices das colunas de saída que casam com ``policy.redact.columns``.
+
+    O ``mysql -N`` não devolve cabeçalho, então o mapeamento vem do próprio
+    SELECT (e do catálogo, para ``*``). Devolve ``(índices, largura, problema)``;
+    com ``problema`` a consulta deve ser negada (falha fechada).
+    """
+    aliases: dict[str, str] = {}
+    order: list[str] = []
+    for table in select.find_all(exp.Table):
+        name = table.name
+        aliases[table.alias_or_name.lower()] = name
+        aliases.setdefault(name.lower(), name)
+        if name not in order:
+            order.append(name)
+
+    catalog = None
+    masked: set[int] = set()
+    index = 0
+
+    for expression in select.expressions:
+        inner = expression.this if isinstance(expression, exp.Alias) else expression
+        is_star = isinstance(inner, exp.Star) or (
+            isinstance(inner, exp.Column) and isinstance(inner.this, exp.Star)
+        )
+        if is_star:
+            qualifier = inner.table if isinstance(inner, exp.Column) else ""
+            targets = [aliases.get(qualifier.lower(), qualifier)] if qualifier else order
+            if catalog is None:
+                catalog = _catalog_columns(ctx)
+            for table_name in targets:
+                columns = catalog.get(table_name.lower())
+                if columns is None:
+                    return (
+                        set(),
+                        0,
+                        f"não foi possível expandir '*' para a tabela {table_name} "
+                        "(rode `db:snapshot`) ou liste as colunas explicitamente; "
+                        "a máscara de colunas (policy.redact.columns) exige isso",
+                    )
+                for column in columns:
+                    if redact.column_matches(rules, table_name, column):
+                        masked.add(index)
+                    index += 1
+            continue
+
+        candidates: list[str | None] = list(order) or [None]
+        hit = False
+        for column in expression.find_all(exp.Column):
+            tables = (
+                [aliases.get(column.table.lower(), column.table)]
+                if column.table
+                else candidates
+            )
+            if any(redact.column_matches(rules, t, column.name) for t in tables):
+                hit = True
+        if isinstance(expression, exp.Alias) and expression.alias:
+            if any(redact.column_matches(rules, t, expression.alias) for t in candidates):
+                hit = True
+        if hit:
+            masked.add(index)
+        index += 1
+
+    return masked, index, None
+
+
 def handle_query(ctx, params):
     sql = params.get("sql")
     if not sql:
@@ -794,8 +877,38 @@ def handle_query(ctx, params):
     except Exception as exc:  # noqa: BLE001
         return TaskResult(False, "falha ao executar a consulta", details=str(exc), exit_code=2)
 
+    summary = f"{len(rows)} linha(s) retornada(s)"
+    policy = redact.get_policy(config)
+    if (
+        policy.columns
+        and redact.applies(policy, "exec")
+        and isinstance(statements[0], exp.Select)
+    ):
+        masked, width, problem = _masked_columns(ctx, statements[0], policy.columns)
+        if not problem and any(len(row) != width for row in rows):
+            problem = (
+                "o número de colunas retornadas não bate com o SELECT; "
+                "liste as colunas explicitamente"
+            )
+        if problem:
+            return TaskResult(
+                False,
+                "db:query bloqueado pela máscara de colunas",
+                details=problem,
+                exit_code=3,
+                status="denied",
+            )
+        rows, masked_count = redact.mask_rows(rows, masked)
+        if masked_count:
+            summary += f", {masked_count} valor(es) mascarado(s) por coluna"
+
     details = "\n".join("\t".join(row) for row in rows)
-    return TaskResult(True, f"{len(rows)} linha(s) retornada(s)", details=details)
+    return TaskResult(
+        True,
+        summary,
+        details=details,
+        hint="Use `limit` menor ou um WHERE mais restrito.",
+    )
 
 
 register(

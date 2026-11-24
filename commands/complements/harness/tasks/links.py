@@ -22,7 +22,7 @@ import sqlglot
 from sqlglot import exp
 
 from ..catalog import register
-from ..filters import iter_files
+from ..filters import config_excludes, iter_files
 from ..profiles import resolve_profile
 from ..progress import for_context, format_duration
 from ..task_types import TaskResult, TaskSpec
@@ -73,6 +73,7 @@ def _iter_files(
     skipped: dict | None = None,
     max_bytes: int = 0,
     extensions: set[str] | frozenset[str] | None = None,
+    exclude: list[str] | None = None,
 ):
     """Percorre as fontes analisáveis, acumulando estatísticas em ``skipped``."""
     yield from iter_files(
@@ -80,6 +81,7 @@ def _iter_files(
         extensions or EXTENSIONS,
         max_bytes=max_bytes,
         skipped=skipped,
+        exclude=exclude,
     )
 
 
@@ -680,6 +682,7 @@ def handle(ctx, params):
             skipped,
             max_bytes=max_bytes,
             extensions=profile.sql_extensions,
+            exclude=config_excludes(ctx.config),
         )
     )
     if only_file:

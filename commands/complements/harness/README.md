@@ -253,7 +253,7 @@ workspace/knowledge/
 
 | Tarefa | Intent | Descrição |
 |---|---|---|
-| `code:skeleton` | read | Esqueleto do código (símbolos, tabelas, imports); incremental |
+| `code:skeleton` | read | Esqueleto em níveis (índice, `level=map`, `level=dir path=`); incremental |
 | `code:search` | read | Busca textual (ripgrep) no repositório ou notas |
 | `code:read` | read | Lê um intervalo de linhas |
 | `code:outline` | read | Imports + assinaturas de um arquivo |
@@ -274,11 +274,97 @@ workspace/knowledge/
 | `py:run` | write | Script/módulo Python |
 | `docker:exec` | write | Comando no contêiner |
 | `logs:tail` | read | Logs de contêiner |
-| `patch:apply` | write | Aplica diff e verifica |
+| `patch:apply` | write | Aplica diff preservando encoding/CRLF/BOM; exige branch não protegida |
+| `notes:draft` | read | Rascunho de ficha de módulo (frontmatter + seções) |
+| `notes:save` | write | Valida e grava a ficha em `notes_path` (mostra diff) |
+| `notes:stale` | read | Fichas cujos arquivos de origem mudaram |
+| `state:save` / `state:load` / `state:list` | write/read/read | Estado de tarefa (`crivonansky-state`) para retomar numa conversa nova |
+| `watch:clip` | read | Monitora o clipboard e executa blocos novos (política e y/N do `exec`) |
+| `watch:downloads` | read | Monitora downloads: `.patch`, fichas e estados, sempre com confirmação |
+| `kb:export` | write | Pasta com MAPA, glossário, ADRs e fichas revisadas (redact + MANIFEST) |
 | `test:run` / `verify` / `lint` | read | Pipelines do `harness.yaml` |
 | `prompt` | read | Prompt do LLM no clipboard |
 
-Tarefas `write` pedem confirmação. Blocos vindos do LLM nunca aceitam `--yes`.
+Tarefas `write` pedem confirmação. Blocos vindos do LLM nunca aceitam `--yes` e **não
+executam** `shell:run`, `py:run` e `docker:exec` (só o usuário, pela linha de comando;
+configurável em `policy.llm_denied_tasks` / `policy.llm_allowed_tasks`).
+
+## Esqueleto em níveis e fichas
+
+`code:skeleton` grava em `workspace/knowledge/skeleton/`:
+
+| Arquivo | Conteúdo |
+|---|---|
+| `project.json` | índice completo (símbolos, tabelas, imports) |
+| `SKELETON.md` | repo pequeno: símbolos inline; repo grande: índice (diretórios + tabelas), dentro de 16.000 caracteres |
+| `MAP.md` | por diretório, os 5 arquivos mais relevantes (tabelas, includes recebidos, símbolos, tamanho) |
+| `dirs/<dir>.md` | símbolos de cada diretório, lidos sob demanda |
+
+```text
+code:skeleton                              # gera tudo (incremental)
+code:skeleton --level map                  # devolve o MAP.md
+code:skeleton --level dir --path cadastro  # símbolos de cadastro/ (e subpastas)
+code:skeleton --exclude "relatorios,*_old.php"
+```
+
+Exclusões permanentes em `legacy.exclude` (globs de diretório, caminho ou nome); valem
+para `code:skeleton` e `db:links`. Toda saída cortada traz `[truncado: N … — dica]`.
+
+**Fichas** são Markdown com frontmatter (`modulo`, `tags`, `tabelas`, `arquivos`,
+`hash_fonte`, `revisado`, `atualizado_em`) e seis seções fixas. Ficam em
+`knowledge.notes_path` (repositório git próprio; padrão `workspace/knowledge/notes/`).
+Fluxo: `notes:draft --module cadastro` → completar no chat → `notes:save --clip` →
+`notes:stale` (roda no hook pós-commit) lista as fichas cujos arquivos mudaram.
+`notes:save` não faz commit; você revisa o diff no repositório de notas.
+
+## Estado, monitores e exportação
+
+**Estado de tarefa.** O prompt pede que o Claude encerre com um bloco `crivonansky-state`
+(`tarefa`, `decisoes`, `arquivos`, `pendencias`, `proximo_passo`).
+
+```text
+state save --clip            # valida e grava em <notes_path>/estado/AAAA-MM-DD-<tarefa>.md
+state list
+state load --last            # ou: state load <parte-do-nome>; devolve o prompt de abertura
+```
+
+`state load` junta o estado ao `MAP.md`: cole na conversa nova e a tarefa continua de onde
+parou. Nada é commitado; o caminho gravado é informado.
+
+**Monitores** (só o usuário os inicia; blocos do LLM não podem). Param com `Ctrl+C` ou
+`watch clip --stop` / `watch downloads --stop`.
+
+- `watch clip` (intervalo `--interval_ms`, padrão 500): reage só a blocos `crivonansky`
+  novos, ignora o próprio `crivonansky-result`, executa pelo mesmo caminho do `exec`
+  (política, y/N, redact, truncamento) e deixa o resultado no clipboard.
+- `watch downloads [--path P] [--branch B]`: reconhece `*.patch` (→ `patch:apply`), fichas
+  `.md` válidas (→ `notes:save`) e blocos de estado (→ `state:save`). Só trata arquivos
+  novos desde o início (`--include_existing` para os antigos), pergunta sempre, nunca apaga
+  o arquivo e lembra o que já viu em `runs/watch-downloads.json`.
+
+**`kb export`** grava em `workspace/kb_export/` (ou `kb.export_path`) `MAPA.md`,
+`glossario.md`, `adr/*.md` e as fichas com `revisado: true`, aplicando `redact`, respeitando
+`kb.max_chars` (padrão 200.000; o que não cabe é listado) e gerando `MANIFEST.md` com o hash
+de cada arquivo e o que mudou desde a última exportação. As fichas entram da mais recente
+para a mais antiga (ainda não há contagem de consultas).
+
+## Privacidade (`policy.redact`)
+
+Antes de ir para o clipboard/stdout (`exec`, `ask`, `context:pack`), o harness mascara
+CPF/CNPJ (com dígitos verificadores), e-mail, telefone e segredos (`senha`, `token`,
+`mysql_connect(..., 'senha')`, `.env`, chaves privadas). Em `db:query`, colunas listadas em
+`policy.redact.columns` saem como `[MASCARADO]` (se não for possível identificar a coluna,
+a consulta é negada). O resumo informa `[redact: cpf=2, …]`; o log bruto só é guardado
+com `policy.redact.keep_raw_log: true`.
+
+## `patch:apply` e o encoding do legado
+
+O diff do chat é UTF-8/LF; o harness lê o formato real de cada arquivo alvo (encoding de
+`legacy.encoding`, CRLF/LF, BOM) e reescreve o diff nele antes do `git apply`; se o
+resultado mudar o formato, o patch é revertido. Parâmetros: `branch` (cria/usa a branch),
+`allow_dirty`, `strip`, `verify`. Branches de `patch.protected_branches` (padrão: main,
+master, develop, production, producao) exigem `branch`. Arquivos tocados precisam estar
+limpos no git.
 
 ## Progresso das tarefas longas
 
@@ -312,6 +398,15 @@ Campos relevantes:
 | `legacy.languages` | `code:skeleton`, `code:outline` | Extensão → linguagem do ast-grep (ex.: `".phtml": "php"`) |
 | `legacy.db_dialect` | `db:snapshot`, `db:links` | Sobrepõe o dialeto do perfil |
 | `legacy.repo_path` | `code:*`, `db:links`, `git:run`, hooks | Repositório legado |
+| `legacy.exclude` / `skeleton.exclude` | `code:skeleton`, `db:links` | Globs excluídos da varredura |
+| `skeleton.max_symbols` / `recent_days` | `code:skeleton` | Símbolos por arquivo no SKELETON.md; janela de commits do ranking |
+| `output.ask_context` / `ask_budget` / `token_chars` | `ask` | Contextos padrão (`map,notes,db`), orçamento em tokens e caracteres por token |
+| `knowledge.notes_path` | `notes:*`, `code:search scope=notes` | Repositório git das fichas; entra em `allowed_roots` |
+| `watch.downloads_path` / `watch.patch_branch` | `watch:downloads` | Pasta monitorada (padrão: Downloads do usuário) e branch usada nos patches |
+| `kb.export_path` / `kb.max_chars` | `kb:export` | Destino e limite total de caracteres |
+| `policy.redact.*` | todas as saídas | `enabled`, `patterns`, `columns`, `secrets`, `apply_to`, `keep_raw_log` |
+| `policy.llm_denied_tasks` / `llm_allowed_tasks` | blocos do LLM | Padrão nega `shell:run`, `py:run`, `docker:exec` |
+| `patch.protected_branches` / `allow_dirty` | `patch:apply` | Branches que exigem `branch`; aceitar árvore suja |
 | `legacy.app_container` | `docker:exec`, `logs:tail`, pipelines | Contêiner da aplicação |
 | `legacy.db_container` | `db:snapshot` live, `db:query` | Contêiner MySQL |
 | `legacy.db_name` | `db:snapshot`, `db:query` | Banco consultado |

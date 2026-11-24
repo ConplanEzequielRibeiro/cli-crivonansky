@@ -2,7 +2,7 @@
 
 import os
 
-from .config import get_legacy_path
+from .config import get_legacy_path, resolve_path as _resolve_config_path
 
 
 def legacy_repo(ctx) -> str:
@@ -11,6 +11,14 @@ def legacy_repo(ctx) -> str:
 
 def workspace(ctx) -> str:
     return os.path.abspath(ctx.workspace)
+
+
+def notes_path(ctx) -> str:
+    """Pasta das fichas: ``knowledge.notes_path`` ou ``workspace/knowledge/notes``."""
+    configured = ((ctx.config or {}).get("knowledge") or {}).get("notes_path")
+    if configured:
+        return os.path.abspath(_resolve_config_path(ctx.config, str(configured)))
+    return os.path.join(workspace(ctx), "knowledge", "notes")
 
 
 def allowed_roots(ctx) -> list[str]:
@@ -23,6 +31,9 @@ def allowed_roots(ctx) -> list[str]:
         roots.append(os.path.abspath(value))
     if not roots:
         roots = [repo, ws]
+    notes = notes_path(ctx)
+    if notes not in roots:
+        roots.append(notes)
     return roots
 
 

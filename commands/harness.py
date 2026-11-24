@@ -19,7 +19,14 @@ class HarnessCommand(Command):
   /harness config
   /harness exec --clip | --file F | --stdin [--yes] [--dry-run]
   /harness run <task> [--param k=v ...] [--yes] [--dry-run]
-  /harness ask "<pergunta>" [--context skeleton,code,db,docs,rag]
+      ex.: run code:skeleton --level map | run code:skeleton --level dir --path cadastro
+           run notes:draft --module cadastro | run notes:stale
+           run patch:apply --file F --branch ajuste   (preserva encoding/CRLF)
+  /harness ask "<pergunta>" [--context map,notes,db,code,docs,rag,skeleton] [--budget TOKENS]
+  /harness state save --clip | list | load [--last | NOME]   (retomar tarefa em outra conversa)
+  /harness notes draft <dir> | save --clip | stale
+  /harness watch clip [--stop] | watch downloads [--path P] [--stop]
+  /harness kb export [--out P] [--max_chars N]
   /harness prompt
   /harness tasks
   /harness runs [--last N]
@@ -40,6 +47,16 @@ class HarnessCommand(Command):
 
         sub = args[0] if args else "help"
         rest = args[1:]
+
+        # Atalhos: `state save`, `notes draft`, `watch clip`, `kb export` -> `run state:save` ...
+        if sub in ("state", "notes", "watch", "kb") and rest and not rest[0].startswith("--"):
+            action, tail = rest[0], list(rest[1:])
+            if sub == "state" and action == "load" and tail and not tail[0].startswith("--"):
+                tail = ["--name", *tail]
+            if sub == "notes" and action == "draft" and tail and not tail[0].startswith("--"):
+                tail = ["--module", *tail]
+            args = ["run", f"{sub}:{action}", *tail]
+            sub, rest = args[0], args[1:]
 
         if sub in ("help", "--help", "-h"):
             print(self.get_usage())
@@ -234,12 +251,22 @@ class HarnessCommand(Command):
         from .complements.harness.engine import HarnessEngine
         from .complements.harness.task_types import TaskContext
 
-        context = "skeleton,db"
+        from .complements.harness import asking
+
+        context = None
+        budget = None
         question_parts = []
         index = 0
         while index < len(args):
             if args[index] == "--context" and index + 1 < len(args):
                 context = args[index + 1]
+                index += 2
+            elif args[index] == "--budget" and index + 1 < len(args):
+                try:
+                    budget = int(args[index + 1])
+                except ValueError:
+                    print("[harness] --budget deve ser um número de tokens")
+                    return False, {"error": "budget inválido"}
                 index += 2
             else:
                 question_parts.append(args[index])
@@ -251,46 +278,73 @@ class HarnessCommand(Command):
             return False, {"error": "pergunta ausente"}
 
         engine = HarnessEngine(config_path=config_path, interactive=True)
+        output_cfg = engine.config.get("output") or {}
+        context = context or str(output_cfg.get("ask_context") or asking.DEFAULT_CONTEXT)
+        if budget is None and output_cfg.get("ask_budget"):
+            budget = int(output_cfg["ask_budget"])
+        chars_per_token = int(output_cfg.get("token_chars") or asking.DEFAULT_CHARS_PER_TOKEN)
+        wanted = {item.strip() for item in context.split(",") if item.strip()}
+
         ctx = TaskContext(
             config=engine.config,
             workspace=engine.workspace,
             run_dir=engine.workspace,
         )
 
-        parts = [f"Pergunta: {question}", ""]
+        sections = []
 
-        if "skeleton" in context:
-            parts.extend(["## Esqueleto do projeto", "", self._skeleton_context(engine), ""])
+        if "notes" in wanted:
+            from .complements.harness.util import notes_path
 
-        if "rag" in context:
+            found = asking.select_notes(notes_path(ctx), question)
+            if found:
+                text = "\n\n".join(f"### {name}\n\n{body.strip()}" for name, body, _ in found)
+            else:
+                text = "(nenhuma ficha casa com a pergunta; use `notes:draft` depois de entender o módulo)"
+            sections.append(("notes", "Fichas revisadas", text))
+
+        if "map" in wanted:
+            sections.append(("map", "Mapa do código", self._map_context(engine)))
+
+        if "skeleton" in wanted:
+            sections.append(("skeleton", "Esqueleto do projeto", self._skeleton_context(engine)))
+
+        if "rag" in wanted:
             spec = get_task("rag:search")
             if spec is not None:
                 result = spec.handler(ctx, {"query": question, "top_k": 5})
-                parts.extend(["## Contexto do RAG", "", result.details or result.summary, ""])
+                sections.append(("rag", "Contexto do RAG", result.details or result.summary))
 
-        if "code" in context:
+        if "code" in wanted:
             symbol = self._identifier(question)
             spec = get_task("code:search")
             if spec is not None and symbol:
                 result = spec.handler(ctx, {"pattern": symbol, "max_results": 10})
-                parts.extend(["## Ocorrências no código", "", result.details, ""])
+                sections.append(("code", "Ocorrências no código", result.details))
             else:
-                parts.extend(
-                    [
-                        "## Ocorrências no código",
-                        "",
+                sections.append(
+                    (
+                        "code",
+                        "Ocorrências no código",
                         "(nenhum identificador reconhecido na pergunta; use code:search)",
-                        "",
-                    ]
+                    )
                 )
 
-        if "db" in context:
-            parts.extend(["## Contexto do banco", "", self._db_context(engine), ""])
+        if "db" in wanted:
+            sections.append(("db", "Contexto do banco", self._db_context(engine)))
 
-        if "docs" in context:
-            parts.extend(["## Documentação importada", "", self._docs_context(engine), ""])
+        if "docs" in wanted:
+            sections.append(("docs", "Documentação importada", self._docs_context(engine)))
 
-        prompt = "\n".join(parts)
+        prompt, usage = asking.fit_sections(question, sections, budget, chars_per_token)
+
+        from .complements.harness import redact
+
+        policy = redact.get_policy(engine.config)
+        if redact.applies(policy, "ask"):
+            prompt, stats = redact.redact_text(prompt, policy)
+            if stats:
+                prompt += f"\n\n[redact: {redact.format_stats(stats)}]\n"
 
         copied = False
         try:
@@ -338,7 +392,35 @@ class HarnessCommand(Command):
 
         text = "\n\n".join(blocks)
         if len(text) > max_chars:
-            text = text[:max_chars] + "\n\n...(contexto do banco truncado)"
+            from .complements.harness.formatter import cut_head
+
+            text, _omitted = cut_head(
+                text,
+                max_chars,
+                hint="Use `db:schema table=<nome>` para uma tabela específica.",
+            )
+        return text
+
+    def _map_context(self, engine, max_chars: int = 20000) -> str:
+        """Injeta o MAP.md (um índice por diretório) no prompt."""
+        import os
+
+        path = os.path.join(engine.workspace, "knowledge", "skeleton", "MAP.md")
+        if not os.path.isfile(path):
+            return "(MAP.md não encontrado; rode `code:skeleton`)"
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except OSError as exc:  # noqa: BLE001
+            return f"(falha ao ler o mapa: {exc})"
+        if len(text) > max_chars:
+            from .complements.harness.formatter import cut_head
+
+            text, _omitted = cut_head(
+                text,
+                max_chars,
+                hint="Use `code:skeleton level=dir path=<diretório>`.",
+            )
         return text
 
     def _skeleton_context(self, engine, max_chars: int = 20000) -> str:
@@ -354,7 +436,13 @@ class HarnessCommand(Command):
         except OSError as exc:  # noqa: BLE001
             return f"(falha ao ler o esqueleto: {exc})"
         if len(text) > max_chars:
-            text = text[:max_chars] + "\n\n...(esqueleto truncado; use code:outline)"
+            from .complements.harness.formatter import cut_head
+
+            text, _omitted = cut_head(
+                text,
+                max_chars,
+                hint="Use `code:skeleton level=map` ou `level=dir path=<diretório>`.",
+            )
         return text
 
     def _docs_context(self, engine, max_chars: int = 4000) -> str:
@@ -379,7 +467,11 @@ class HarnessCommand(Command):
             return "(nenhum arquivo no manifesto)"
         text = "\n".join(lines)
         if len(text) > max_chars:
-            text = text[:max_chars] + "\n...(lista truncada)"
+            from .complements.harness.formatter import cut_head
+
+            text, _omitted = cut_head(
+                text, max_chars, hint="Use `rag:search` para localizar um manual."
+            )
         return text
 
     def _identifier(self, question: str) -> str | None:
@@ -502,7 +594,7 @@ class HarnessCommand(Command):
                     key, _, value = args[index].partition("=")
                     params[key] = value
             elif item.startswith("--"):
-                key = item[2:]
+                key = item[2:].replace("-", "_")
                 if index + 1 < len(args) and not args[index + 1].startswith("--"):
                     params[key] = args[index + 1]
                     index += 1
