@@ -14,6 +14,20 @@ from .runs import RunStore
 from .sinks import emit
 from .task_types import TaskContext
 
+# Confirmação de tarefas de escrita: o host (TUI) pode substituir o ``input()``
+# por uma caixa de diálogo. ``None`` mantém o comportamento de terminal.
+_CONFIRM_HANDLER = None
+
+
+def set_confirm_handler(handler) -> None:
+    """``handler(task, params, preview) -> bool`` ou ``None`` para o padrão."""
+    global _CONFIRM_HANDLER
+    _CONFIRM_HANDLER = handler
+
+
+def get_confirm_handler():
+    return _CONFIRM_HANDLER
+
 
 def _error_details(exc: Exception) -> str:
     """Detalhes de uma exceção inesperada, com o caminho quando for OSError."""
@@ -211,6 +225,13 @@ class HarnessEngine:
             return f"(prévia indisponível: {exc})"
 
     def _confirm(self, block, preview: str | None = None) -> bool:
+        handler = get_confirm_handler()
+        if handler is not None:
+            try:
+                return bool(handler(block.task, dict(block.params), preview))
+            except Exception:  # noqa: BLE001 - host indisponível não autoriza
+                return False
+
         print(f"\n[harness] tarefa de escrita: {block.task}")
         print(json.dumps(block.params, ensure_ascii=False, indent=2))
         if preview:

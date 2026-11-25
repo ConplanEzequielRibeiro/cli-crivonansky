@@ -10,7 +10,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from tui_app import MyCLIApp
+from tui_app import ConfirmScreen, MyCLIApp
 from tui_log import WrappingRichLog
 
 
@@ -317,5 +317,66 @@ def test_header_becomes_compact_on_narrow_terminals(tmp_path, monkeypatch):
             await pilot.resize_terminal(100, 20)
             await pilot.pause()
             assert app.header.has_class("compact") is False
+
+    asyncio.run(scenario())
+
+
+class ConfirmExecutor:
+    """Executor que passa pela confirmação global do harness."""
+
+    def __init__(self):
+        self.registry = FakeRegistry()
+        self.last_result = (True, None)
+
+    def execute(self, command):
+        from commands.complements.harness.engine import get_confirm_handler
+
+        handler = get_confirm_handler()
+        if handler is None:
+            self.last_result = (False, {"error": "sem handler"})
+            return "sem handler"
+        answer = handler("clean:artifacts", {"scope": "all"}, "- knowledge/skeleton")
+        self.last_result = (answer, None)
+        return "confirmado" if answer else "cancelado"
+
+
+def test_harness_confirmation_yes(tmp_path, monkeypatch):
+    monkeypatch.setenv("CRIVONANSKY_HISTORY", str(tmp_path / "history.json"))
+    monkeypatch.setenv("CRIVONANSKY_OUTPUT_DIR", str(tmp_path / "out"))
+    executor = ConfirmExecutor()
+    app = MyCLIApp(executor)
+
+    async def scenario():
+        async with app.run_test(size=(100, 30)) as pilot:
+            app.input.value = "/harness clean artifacts"
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert isinstance(app.screen, ConfirmScreen)
+            await pilot.press("y")
+            await pilot.pause()
+
+            assert executor.last_result[0] is True
+
+    asyncio.run(scenario())
+
+
+def test_harness_confirmation_no(tmp_path, monkeypatch):
+    monkeypatch.setenv("CRIVONANSKY_HISTORY", str(tmp_path / "history.json"))
+    monkeypatch.setenv("CRIVONANSKY_OUTPUT_DIR", str(tmp_path / "out"))
+    executor = ConfirmExecutor()
+    app = MyCLIApp(executor)
+
+    async def scenario():
+        async with app.run_test(size=(100, 30)) as pilot:
+            app.input.value = "/harness clean artifacts"
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert isinstance(app.screen, ConfirmScreen)
+            await pilot.press("n")
+            await pilot.pause()
+
+            assert executor.last_result[0] is False
 
     asyncio.run(scenario())

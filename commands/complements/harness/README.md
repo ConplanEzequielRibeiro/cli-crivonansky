@@ -289,7 +289,8 @@ workspace/knowledge/
 
 Tarefas `write` pedem confirmação. Blocos vindos do LLM nunca aceitam `--yes` e **não
 executam** `shell:run`, `py:run` e `docker:exec` (só o usuário, pela linha de comando;
-configurável em `policy.llm_denied_tasks` / `policy.llm_allowed_tasks`).
+configurável em `policy.llm_denied_tasks` / `policy.llm_allowed_tasks`). Na TUI a
+confirmação abre um modal (`y`/`n`) com a prévia da tarefa; no terminal continua `y/N`.
 
 ## Esqueleto em níveis e fichas
 

@@ -216,6 +216,8 @@ def rebuild():
 ## Windows-specific
 
 - **PowerShell spawning**: several commands open new PowerShell windows via `start powershell -NoExit -Command "..."`. The `task` command also activates the venv before running.
+- **Windows paths**: `CommandParser` uses `shlex` with `posix=False` on Windows, so backslashes in `--config C:\...`, `--file`, `--out` and similar are preserved (quotes are stripped).
+- **TUI confirmations**: write tasks use `engine.set_confirm_handler(...)`; the TUI registers a `ConfirmScreen` modal (`y`/`n`) instead of `input()` in the worker thread.
 - **Virtual desktops**: `load-app` uses `commands/complements/load_app_plugin/VirtualDesktop11.exe` (binary committed) to move windows between desktops.
 - **Docker**: `environment` and `container-terminal` commands assume Docker is available.
 

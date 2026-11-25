@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -26,7 +27,8 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal
-from textual.widgets import Input, Label, ListItem, ListView
+from textual.screen import ModalScreen
+from textual.widgets import Button, Input, Label, ListItem, ListView, Static
 
 from tui_log import WrappingRichLog
 from tui_logo import banner
@@ -45,6 +47,50 @@ class PromptInput(Input):
         complete = getattr(self.app, "complete_from_dropdown", None)
         if complete is not None and complete():
             event.stop()
+
+
+class ConfirmScreen(ModalScreen[bool]):
+    """Confirmação de tarefa de escrita dentro da TUI (substitui o input())."""
+
+    BINDINGS = [
+        Binding("y", "yes", "Executar", show=False),
+        Binding("n", "no", "Cancelar", show=False),
+        Binding("escape", "no", "Cancelar", show=False),
+    ]
+
+    def __init__(self, task: str, params: dict, preview: str | None = None):
+        super().__init__()
+        self._task = task
+        self._params = params or {}
+        self._preview = preview
+
+    def compose(self) -> ComposeResult:
+        body = [
+            f"Tarefa de escrita: {self._task}",
+            "",
+            json.dumps(self._params, ensure_ascii=False, indent=2, default=str),
+        ]
+        if self._preview:
+            body.extend(["", self._preview])
+        yield Container(
+            Static("\n".join(body), id="confirm-text"),
+            Horizontal(
+                Button("Executar (y)", id="yes", variant="success"),
+                Button("Cancelar (n)", id="no"),
+                id="confirm-buttons",
+            ),
+            id="confirm-box",
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        event.stop()
+        self.dismiss(event.button.id == "yes")
+
+    def action_yes(self) -> None:
+        self.dismiss(True)
+
+    def action_no(self) -> None:
+        self.dismiss(False)
 
 
 class MyCLIApp(App):
@@ -196,6 +242,34 @@ class MyCLIApp(App):
         padding: 0 1;
         overflow-x: hidden;
     }
+
+    ConfirmScreen {
+        align: center middle;
+    }
+
+    #confirm-box {
+        width: 90%;
+        max-width: 110;
+        max-height: 85%;
+        background: $panel;
+        border: thick $primary;
+        padding: 1 2;
+    }
+
+    #confirm-text {
+        height: auto;
+        max-height: 70%;
+        overflow-y: auto;
+    }
+
+    #confirm-buttons {
+        height: 3;
+        align: center middle;
+    }
+
+    #confirm-buttons Button {
+        margin: 0 1;
+    }
     """
 
     def __init__(self, executor):
@@ -252,7 +326,41 @@ class MyCLIApp(App):
         self._write_banner()
         self.input.focus()
 
+        self._harness_engine = None
+        try:
+            from commands.complements.harness import engine as harness_engine
+
+            self._harness_engine = harness_engine
+            harness_engine.set_confirm_handler(self._confirm_harness)
+        except Exception:  # noqa: BLE001 - harness opcional
+            self._harness_engine = None
+
+    def _confirm_harness(self, task: str, params: dict, preview: str | None = None) -> bool:
+        """Chamado da worker thread: mostra a confirmação e espera a resposta."""
+        done = threading.Event()
+        answer = {"value": False}
+
+        def show() -> None:
+            def finish(value) -> None:
+                answer["value"] = bool(value)
+                done.set()
+
+            try:
+                self.push_screen(ConfirmScreen(task, params, preview), callback=finish)
+            except Exception:  # noqa: BLE001 - app encerrando
+                done.set()
+
+        try:
+            self.call_from_thread(show)
+        except Exception:  # noqa: BLE001 - fora do loop da TUI
+            return False
+
+        done.wait(timeout=120)
+        return answer["value"]
+
     def on_unmount(self):
+        if getattr(self, "_harness_engine", None) is not None:
+            self._harness_engine.set_confirm_handler(None)
         self._stop_spinner()
         self._stop_status_reset()
         self._write_history()
