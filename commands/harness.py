@@ -27,6 +27,8 @@ class HarnessCommand(Command):
   /harness notes draft <dir> | save --clip | stale
   /harness watch clip [--stop] | watch downloads [--path P] [--stop]
   /harness kb export [--out P] [--max_chars N]
+  /harness clean artifacts [--scope skeleton,db,links,docs,legacy-code] [--param dry_run=true]
+  /harness clean runs [--days 30] [--keep 100] [--param dry_run=true]
   /harness prompt
   /harness tasks
   /harness runs [--last N]
@@ -49,7 +51,7 @@ class HarnessCommand(Command):
         rest = args[1:]
 
         # Atalhos: `state save`, `notes draft`, `watch clip`, `kb export` -> `run state:save` ...
-        if sub in ("state", "notes", "watch", "kb") and rest and not rest[0].startswith("--"):
+        if sub in ("state", "notes", "watch", "kb", "clean") and rest and not rest[0].startswith("--"):
             action, tail = rest[0], list(rest[1:])
             if sub == "state" and action == "load" and tail and not tail[0].startswith("--"):
                 tail = ["--name", *tail]

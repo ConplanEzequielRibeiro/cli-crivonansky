@@ -282,6 +282,8 @@ workspace/knowledge/
 | `watch:clip` | read | Monitora o clipboard e executa blocos novos (política e y/N do `exec`) |
 | `watch:downloads` | read | Monitora downloads: `.patch`, fichas e estados, sempre com confirmação |
 | `kb:export` | write | Pasta com MAPA, glossário, ADRs e fichas revisadas (redact + MANIFEST) |
+| `clean:artifacts` | write | Remove artefatos regeráveis (`knowledge/*`, exceto `notes`) |
+| `clean:runs` | write | Remove execuções antigas de `runs/` e compacta o `runs.jsonl` |
 | `test:run` / `verify` / `lint` | read | Pipelines do `harness.yaml` |
 | `prompt` | read | Prompt do LLM no clipboard |
 
@@ -380,6 +382,27 @@ limpos no git.
 O `db:links` parseia cada SQL uma única vez (memoizado) e ignora bundles
 `*.min.js`/`*.bundle.js`/`*.pack.js`. Para limitar o custo em arquivos gigantes, use
 `--max_file_mb N`.
+
+## Limpeza
+
+Duas tarefas de escrita (pedem confirmação e mostram o que será removido):
+
+```text
+run clean:artifacts [--scope skeleton,db,links,docs,legacy-code] [--param dry_run=true]
+run clean:runs      [--days 30] [--keep 100] [--param dry_run=true]
+```
+
+- **`clean:artifacts`** remove `knowledge/{skeleton,db,links,docs}` e, com
+  `legacy-code`, o resíduo da v1 em `knowledge/code/` (que nenhuma tarefa atual lê).
+  **Nunca** toca `knowledge/notes/` (fichas) nem o `harness.yaml`.
+- **`clean:runs`** apaga execuções mais antigas que `days` **e** fora das `keep` mais
+  recentes (proteção dupla) e reescreve o `runs.jsonl` só com execuções existentes.
+  Diretórios fora do padrão `c-<8 hex>` (ex.: `rag-api.*`) são ignorados.
+- `--param dry_run=true` lista caminhos e tamanho sem apagar (roda como leitura, sem
+  confirmação). O `env:check` mostra o tamanho de `knowledge/` e `runs/`.
+
+`vendor/` e `.venv/` ficam de fora: são reinstaláveis, mas caros; remova manualmente
+(veja "Instalação").
 
 ## Configuração
 

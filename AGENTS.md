@@ -88,6 +88,7 @@ Contract subcommands:
 /harness notes draft <dir> | save --clip | stale
 /harness watch clip [--stop] | watch downloads [--path P] [--stop]
 /harness kb export [--out P] [--max_chars N]
+/harness clean artifacts [--scope ...] | clean runs [--days N] [--keep N]
 /harness prompt | tasks | runs [--last N] | env:check
 /harness hooks install|uninstall|status
 ```
@@ -106,6 +107,8 @@ Notes:
   `policy.llm_denied_tasks` blocks `shell:run`/`py:run`/`docker:exec`/`watch:*` from LLM
   blocks. `patch:apply` preserves encoding/CRLF/BOM and refuses protected branches.
 - `watch:clip`/`watch:downloads` are long-running loops (TUI worker).
+- `clean:artifacts`/`clean:runs` remove regenerable artifacts and old runs; they never
+  touch `knowledge/notes` or `harness.yaml`, and honor `--param dry_run=true`.
 - `commands/harness.py` must remain importable **without** PyYAML/sqlglot so that
   `/harness install` works on a bare host venv. Keep heavy imports inside methods.
 - Do not add harness runtime deps (PyYAML, pyperclip, sqlglot) to the root

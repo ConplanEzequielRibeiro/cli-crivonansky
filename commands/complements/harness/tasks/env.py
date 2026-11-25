@@ -29,6 +29,23 @@ def _line(label: str, ok: bool, detail: str = "") -> str:
     return f"- [{mark}] {label}{suffix}"
 
 
+def _dir_size(path: str) -> int:
+    total = 0
+    for dirpath, _dirnames, filenames in os.walk(path):
+        for name in filenames:
+            try:
+                total += os.path.getsize(os.path.join(dirpath, name))
+            except OSError:
+                continue
+    return total
+
+
+def _mb(size: int) -> str:
+    if size < 1024 * 1024:
+        return f"{size / 1024:.0f} KB"
+    return f"{size / (1024 * 1024):.1f} MB"
+
+
 def _check_command(label: str, cmd: list[str], timeout: float = 15) -> tuple[str, bool]:
     """Roda um comando externo sem derrubar o env:check quando ele não existe."""
     try:
@@ -77,6 +94,13 @@ def handle(ctx, params):
         add(_line("workspace", True, workspace_path), True)
     except OSError as exc:
         add(_line("workspace", False, f"{workspace_path}: {exc}"), False)
+
+    knowledge_size = _dir_size(os.path.join(workspace_path, "knowledge"))
+    runs_size = _dir_size(os.path.join(workspace_path, "runs"))
+    lines.append(
+        f"- tamanho do workspace: knowledge {_mb(knowledge_size)} | runs {_mb(runs_size)} "
+        "(limpe com `clean:artifacts`/`clean:runs`)"
+    )
 
     if ((ctx.config.get("knowledge") or {}).get("notes_path")):
         notes_dir = notes_path(ctx)

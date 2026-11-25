@@ -24,6 +24,7 @@ def load_tasks() -> None:
         return
 
     from .tasks import (  # noqa: F401
+        clean,
         db,
         docker,
         docs,
