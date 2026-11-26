@@ -101,8 +101,12 @@ Notes:
   `rag:sync` only with `--sync`/`--rag`. The skeleton must run before `db:links` so the
   `symbol` field of the links can be resolved.
 - The RAG is optional (`install --with-rag`); `code:*` tasks never depend on it.
-- `code:skeleton` has levels (`index`/`map`/`dir`) and writes `MAP.md` + `dirs/*.md`;
+- `code:skeleton` has levels (`index`/`map`/`dir`/`part`) and writes `MAP.md` +
+  `dirs/*.md`; `split_map` (`skeleton.map_split`) writes the complete map as
+  `map/part-NNN.md` + an index in `MAP.md` when it exceeds `map_part_chars`.
   `legacy.exclude`/`skeleton.exclude` and `skeleton.max_symbols` control the scan/output.
+  PHP files with mixed HTML are masked before parsing, so symbols/SQL after `<script>`
+  or HTML comments are not lost.
 - `policy.redact` is on by default (PII, secrets, sensitive `db:query` columns);
   `policy.llm_denied_tasks` blocks `shell:run`/`py:run`/`docker:exec`/`watch:*` from LLM
   blocks. `patch:apply` preserves encoding/CRLF/BOM and refuses protected branches.

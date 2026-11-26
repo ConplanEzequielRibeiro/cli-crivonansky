@@ -217,6 +217,8 @@ instrução do LLM (contrato, workflow JIT e catálogo).
 | `--purge` | `stop` | Remove o volume do MySQL |
 | `--sync` | `prepare`, `preprocess` | Encadeia `rag:sync` |
 | `--full` | `prepare`, `preprocess`, `code:skeleton` | Reindexação completa |
+| `--split-map` / `--map-part-chars N` | `code:skeleton` | Mapa completo em `map/part-NNN.md` + índice; orçamento de cada parte |
+| `--part N` | `code:skeleton` (`level=part`) | Devolve uma parte do mapa dividido |
 | `--force` | `install`, `code:skeleton` | Regenera config / reconstrói índice |
 | `--skip-docker` | `install` | Não exige Docker |
 | `--check-only` | `install` | Só valida |
@@ -241,7 +243,7 @@ O workspace de conhecimento:
 
 ```text
 workspace/knowledge/
-├── skeleton/   project.json + SKELETON.md   (mapa do código)
+├── skeleton/   project.json + SKELETON.md + MAP.md + dirs/ (+ map/ com split_map)
 ├── code/       src/ (legado, se existir) + ... (não é mais gerado)
 ├── db/         schema-catalog.json + tables/*.md
 ├── links/      code-db-links + fk-inferred + includes + tables/*.md
@@ -253,7 +255,7 @@ workspace/knowledge/
 
 | Tarefa | Intent | Descrição |
 |---|---|---|
-| `code:skeleton` | read | Esqueleto em níveis (índice, `level=map`, `level=dir path=`); incremental |
+| `code:skeleton` | read | Esqueleto em níveis (índice, `level=map`, `level=dir path=`); `split_map` gera o mapa completo em partes + índice; incremental |
 | `code:search` | read | Busca textual (ripgrep) no repositório ou notas |
 | `code:read` | read | Lê um intervalo de linhas |
 | `code:outline` | read | Imports + assinaturas de um arquivo |
@@ -301,17 +303,32 @@ confirmação abre um modal (`y`/`n`) com a prévia da tarefa; no terminal conti
 | `project.json` | índice completo (símbolos, tabelas, imports) |
 | `SKELETON.md` | repo pequeno: símbolos inline; repo grande: índice (diretórios + tabelas), dentro de 16.000 caracteres |
 | `MAP.md` | por diretório, os 5 arquivos mais relevantes (tabelas, includes recebidos, símbolos, tamanho) |
+| `map/part-NNN.md` | mapa completo em partes (com `split_map`), dentro de `map_part_chars` cada |
 | `dirs/<dir>.md` | símbolos de cada diretório, lidos sob demanda |
 
 ```text
 code:skeleton                              # gera tudo (incremental)
-code:skeleton --level map                  # devolve o MAP.md
+code:skeleton --level map                  # devolve o MAP.md (ou o índice das partes)
 code:skeleton --level dir --path cadastro  # símbolos de cadastro/ (e subpastas)
+code:skeleton --param split_map=true --param map_part_chars=24000  # mapa completo em partes
+code:skeleton --level part --part 2        # uma parte do mapa (ou --path=<diretório>)
 code:skeleton --exclude "relatorios,*_old.php"
 ```
 
+**Mapa completo em partes.** Com `split_map=true` (ou `skeleton.map_split: true`) o
+`MAP.md` deixa de listar só os 5 arquivos mais relevantes por diretório: ele traz todos
+os arquivos e, se passar de `map_part_chars` (padrão 24.000), é gravado como
+`map/part-001.md`, `map/part-002.md`… e o `MAP.md` vira um índice (partes, diretórios
+com ponteiro para a parte e ranking de tabelas). O LLM lê só a parte necessária com
+`code:skeleton level=part part=<N>`; não é preciso carregar o mapa inteiro.
+
 Exclusões permanentes em `legacy.exclude` (globs de diretório, caminho ou nome); valem
 para `code:skeleton` e `db:links`. Toda saída cortada traz `[truncado: N … — dica]`.
+
+**PHP com HTML misto.** O `code:skeleton` mascara os trechos HTML antes de parsear PHP
+(`<?php … ?>`), preservando as linhas. Assim símbolos e SQL que vêm depois de `<script>`,
+comentários HTML ou blocos de template não são mais perdidos. Ao mudar o parser, a
+versão do `project.json` é incrementada e o cache incremental é refeito.
 
 **Fichas** são Markdown com frontmatter (`modulo`, `tags`, `tabelas`, `arquivos`,
 `hash_fonte`, `revisado`, `atualizado_em`) e seis seções fixas. Ficam em
@@ -424,6 +441,7 @@ Campos relevantes:
 | `legacy.repo_path` | `code:*`, `db:links`, `git:run`, hooks | Repositório legado |
 | `legacy.exclude` / `skeleton.exclude` | `code:skeleton`, `db:links` | Globs excluídos da varredura |
 | `skeleton.max_symbols` / `recent_days` | `code:skeleton` | Símbolos por arquivo no SKELETON.md; janela de commits do ranking |
+| `skeleton.map_split` / `map_part_chars` | `code:skeleton` | Mapa completo em `map/part-NNN.md` + índice; orçamento de cada parte |
 | `output.ask_context` / `ask_budget` / `token_chars` | `ask` | Contextos padrão (`map,notes,db`), orçamento em tokens e caracteres por token |
 | `knowledge.notes_path` | `notes:*`, `code:search scope=notes` | Repositório git das fichas; entra em `allowed_roots` |
 | `watch.downloads_path` / `watch.patch_branch` | `watch:downloads` | Pasta monitorada (padrão: Downloads do usuário) e branch usada nos patches |

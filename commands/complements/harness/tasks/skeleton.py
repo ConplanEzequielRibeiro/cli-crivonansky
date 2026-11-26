@@ -8,7 +8,9 @@ Gera, em uma única passada (incremental por mtime/tamanho):
   no prompt do LLM; em repositórios pequenos traz os símbolos inline, nos grandes
   vira só diretórios + tabelas + ponteiros (nunca corta no meio);
 * ``workspace/knowledge/skeleton/MAP.md`` — por diretório, os arquivos mais
-  relevantes (ranking por tabelas, símbolos, tamanho e quem os inclui);
+  relevantes (ranking por tabelas, símbolos, tamanho e quem os inclui); com
+  ``split_map`` (ou ``skeleton.map_split``) vira o mapa completo, dividido em
+  ``map/part-NNN.md`` + um índice quando passa do orçamento;
 * ``workspace/knowledge/skeleton/dirs/<dir>.md`` — fatia detalhada de cada
   diretório, lida sob demanda (``level=dir path=<dir>``).
 
@@ -44,10 +46,15 @@ from ..util import (
 # Orçamento do SKELETON.md (vai para o prompt) e do MAP.md; o JSON pode ser maior.
 SKELETON_BUDGET = 16_000
 MAP_BUDGET = 24_000
+# O mapa completo (mapa dividido) nunca corta: cada parte respeita este orçamento.
+MAP_PART_BUDGET = 24_000
 # Arquivos de destaque por diretório no MAP.md e tabelas no índice.
 MAP_TOP_FILES = 5
 INDEX_TOP_TABLES = 40
-LEVELS = ("index", "map", "dir")
+MAP_PARTS_DIR = "map"
+LEVELS = ("index", "map", "dir", "part")
+# Versão do ``project.json``: invalida o cache incremental quando o parser muda.
+PROJECT_VERSION = 3
 # Acima disso o arquivo não é parseado em busca de símbolos.
 MAX_PARSE_BYTES = 2 * 1024 * 1024
 
@@ -200,9 +207,10 @@ NAVIGATE = [
     "",
     "1. `code:skeleton level=map` para os arquivos mais relevantes por diretório.",
     "2. `code:skeleton level=dir path=<diretório>` para os símbolos de um diretório.",
-    "3. `code:search pattern=\"...\" path=<diretório>` para localizar.",
-    "4. `code:read file=<arquivo> start=<linha>` para ler o trecho.",
-    "5. `code:symbol name=<símbolo> kind=ref` para ver quem chama.",
+    "3. `code:skeleton level=part part=<N>` para uma parte do mapa completo (se houver).",
+    "4. `code:search pattern=\"...\" path=<diretório>` para localizar.",
+    "5. `code:read file=<arquivo> start=<linha>` para ler o trecho.",
+    "6. `code:symbol name=<símbolo> kind=ref` para ver quem chama.",
     "",
 ]
 
@@ -328,34 +336,53 @@ def rank_files(files_index: dict, recent: dict | None = None) -> dict[str, float
     return scores
 
 
-def _render_map(
-    files_index: dict, tables: dict, generated_at: str, recent: dict | None = None
-) -> str:
-    scores = rank_files(files_index, recent)
-    grouped = _by_dir(files_index)
-    parts = [
+def _map_header(generated_at: str, top: int | None) -> list[str]:
+    scope = f"os {top} arquivos mais relevantes" if top else "todos os arquivos"
+    return [
         "# Mapa do código",
         "",
         f"- gerado em: {generated_at}",
-        f"- por diretório, os {MAP_TOP_FILES} arquivos mais relevantes "
-        "(`sím` = símbolos, `tab` = tabelas citadas)",
+        f"- por diretório, {scope} (`sím` = símbolos, `tab` = tabelas citadas)",
         "",
     ]
+
+
+def _map_sections(
+    files_index: dict, scores: dict[str, float], top: int | None
+) -> list[tuple[str, list[str]]]:
+    """Blocos Markdown por diretório (``top=None`` inclui todos os arquivos)."""
+    grouped = _by_dir(files_index)
+    sections: list[tuple[str, list[str]]] = []
     for directory in sorted(grouped):
         items = grouped[directory]
         ranked = sorted(items, key=lambda item: (-scores[item[0]], item[0]))
-        parts.append(f"## {directory}/ ({len(items)})")
-        parts.append("")
-        for relative_path, entry in ranked[:MAP_TOP_FILES]:
+        shown = ranked if top is None else ranked[:top]
+        lines = [f"## {directory}/ ({len(items)})", ""]
+        for relative_path, entry in shown:
             tabs = entry.get("tables") or []
             extra = f", tab: {', '.join(tabs[:3])}" if tabs else ""
-            parts.append(
+            lines.append(
                 f"- `{os.path.basename(relative_path)}` {entry.get('loc', 0)}L, "
                 f"{len(entry.get('symbols') or [])} sím{extra}"
             )
-        if len(items) > MAP_TOP_FILES:
-            parts.append(f"- … +{len(items) - MAP_TOP_FILES} arquivo(s)")
-        parts.append("")
+        if top is not None and len(items) > top:
+            lines.append(f"- … +{len(items) - top} arquivo(s)")
+        lines.append("")
+        sections.append((directory, lines))
+    return sections
+
+
+def _render_map(
+    files_index: dict,
+    tables: dict,
+    generated_at: str,
+    recent: dict | None = None,
+    top: int | None = MAP_TOP_FILES,
+) -> str:
+    scores = rank_files(files_index, recent)
+    parts = _map_header(generated_at, top)
+    for _directory, lines in _map_sections(files_index, scores, top):
+        parts += lines
     return "\n".join(parts)
 
 
@@ -419,6 +446,190 @@ def _write_slices(ctx, files_index: dict) -> int:
 
 
 # ---------------------------------------------------------------------------
+# MAP.md completo: fragmentos + índice (para repositórios grandes)
+# ---------------------------------------------------------------------------
+def _clear_map_parts(ctx) -> None:
+    folder = os.path.join(skeleton_dir(ctx), MAP_PARTS_DIR)
+    if not os.path.isdir(folder):
+        return
+    for name in os.listdir(folder):
+        if name.endswith(".md"):
+            try:
+                os.remove(os.path.join(folder, name))
+            except OSError:
+                pass
+
+
+def _split_map_sections(
+    sections: list[tuple[str, list[str]]], budget: int
+) -> list[dict]:
+    """Agrupa os blocos de diretório em partes de até ``budget`` caracteres.
+
+    Uma seção maior que a parte é quebrada em blocos consecutivos (repetindo o
+    cabeçalho ``## diretório/``), nunca no meio de uma linha.
+    """
+    parts: list[dict] = []
+    current: dict = {"lines": [], "dirs": [], "files": 0, "chars": 0}
+    # Reserva para o cabeçalho de cada parte (título, data e legenda).
+    body_budget = max(budget - 400, 500)
+
+    def flush() -> None:
+        nonlocal current
+        if current["lines"]:
+            parts.append(current)
+        current = {"lines": [], "dirs": [], "files": 0, "chars": 0}
+
+    def blocks_for(directory: str, lines: list[str]) -> list[list[str]]:
+        if len("\n".join(lines)) <= body_budget:
+            return [lines]
+        header, body = lines[:2], lines[2:]
+        chunks: list[list[str]] = []
+        chunk: list[str] = []
+        size = 0
+        for line in body:
+            if chunk and size + len(line) + 1 > body_budget:
+                chunks.append(chunk)
+                chunk, size = [], 0
+            chunk.append(line)
+            size += len(line) + 1
+        if chunk:
+            chunks.append(chunk)
+        return [header + chunk for chunk in chunks]
+
+    for directory, lines in sections:
+        for block in blocks_for(directory, lines):
+            block_chars = sum(len(line) + 1 for line in block)
+            if current["lines"] and current["chars"] + block_chars > body_budget:
+                flush()
+            current["lines"] += block
+            current["chars"] += block_chars
+            current["dirs"].append(directory)
+            current["files"] += sum(1 for line in block if line.startswith("- `"))
+    flush()
+    return parts
+
+
+def _render_map_index(
+    generated_at: str,
+    parts: list[dict],
+    files_index: dict,
+    tables: dict,
+    budget: int,
+) -> str:
+    """Índice do mapa dividido: partes, diretórios e tabelas (sem carregar tudo)."""
+    dir_parts: dict[str, list[int]] = {}
+    for number, part in enumerate(parts, 1):
+        for directory in dict.fromkeys(part["dirs"]):
+            dir_parts.setdefault(directory, []).append(number)
+
+    grouped = _by_dir(files_index)
+    lines = [
+        "# Mapa do código — índice",
+        "",
+        f"- gerado em: {generated_at}",
+        f"- diretórios: {len(grouped)} | arquivos: {len(files_index)} | "
+        f"partes: {len(parts)} (até ~{budget} caracteres cada)",
+        "- o mapa completo está em `map/part-NNN.md`; carregue só a parte "
+        "do diretório que precisar.",
+        "",
+        "## Partes",
+        "",
+    ]
+    for number, part in enumerate(parts, 1):
+        dirs = list(dict.fromkeys(part["dirs"]))
+        label = ", ".join(f"`{name}/`" for name in dirs[:6])
+        if len(dirs) > 6:
+            label += f" +{len(dirs) - 6}"
+        lines.append(
+            f"- `map/part-{number:03d}.md` — {part['files']} arquivo(s), "
+            f"{part['chars']} caracteres: {label or '(vazia)'}"
+        )
+    lines += ["", f"## Diretórios ({len(grouped)})", ""]
+    for directory in sorted(grouped):
+        items = grouped[directory]
+        syms = sum(len(entry.get("symbols") or []) for _path, entry in items)
+        numbers = dir_parts.get(directory) or []
+        pointer = ""
+        if numbers:
+            listed = ", ".join(f"part-{number:03d}.md" for number in numbers[:4])
+            if len(numbers) > 4:
+                listed += f" +{len(numbers) - 4}"
+            pointer = f" → `map/{listed}`"
+        lines.append(
+            f"- `{directory}/` — {len(items)} arquivo(s), {syms} símbolo(s){pointer}"
+        )
+    if tables:
+        lines += ["", f"## Tabelas ({len(tables)})", ""]
+        lines += _table_lines(tables, INDEX_TOP_TABLES)
+    lines += [
+        "",
+        "> Leia uma parte com `code:skeleton level=part part=<N>` "
+        "(`path=<diretório>` acha a parte sozinho).",
+        "",
+    ]
+    lines += NAVIGATE
+    text = "\n".join(lines)
+    if len(text) > budget:
+        text = _fit_text(
+            text,
+            budget,
+            "Leia uma parte com `code:skeleton level=part part=<N>`.",
+        )
+    return text
+
+
+def _write_map_parts(
+    ctx,
+    sections: list[tuple[str, list[str]]],
+    generated_at: str,
+    files_index: dict,
+    tables: dict,
+    budget: int,
+) -> tuple[str, list[str]]:
+    """Grava ``map/part-NNN.md`` e devolve ``(índice, caminhos)``."""
+    folder = ensure_dir(os.path.join(skeleton_dir(ctx), MAP_PARTS_DIR))
+    _clear_map_parts(ctx)
+    parts = _split_map_sections(sections, budget)
+    total = len(parts)
+    paths: list[str] = []
+    for number, part in enumerate(parts, 1):
+        header = [
+            f"# Mapa do código — parte {number}/{total}",
+            "",
+            f"- gerado em: {generated_at}",
+            "- por diretório, todos os arquivos (`sím` = símbolos, `tab` = tabelas citadas)",
+            "",
+        ]
+        path = os.path.join(folder, f"part-{number:03d}.md")
+        text = "\n".join(header + part["lines"]).rstrip("\n") + "\n"
+        write_text(path, text)
+        part["chars"] = len(text)
+        paths.append(path)
+    index = _render_map_index(generated_at, parts, files_index, tables, budget)
+    return index, paths
+
+
+def _find_part_for_dir(ctx, directory: str) -> str | None:
+    """Parte que contém ``directory/`` (ou ``None``)."""
+    folder = os.path.join(skeleton_dir(ctx), MAP_PARTS_DIR)
+    if not os.path.isdir(folder):
+        return None
+    header = f"## {directory}/"
+    for name in sorted(os.listdir(folder)):
+        if not name.endswith(".md"):
+            continue
+        path = os.path.join(folder, name)
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    if line.startswith(header):
+                        return path
+        except OSError:
+            continue
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Handler
 # ---------------------------------------------------------------------------
 def handle(ctx, params):
@@ -440,10 +651,43 @@ def handle(ctx, params):
     if level == "dir" and not dir_path:
         return TaskResult(False, "level=dir exige o parâmetro 'path'", exit_code=2)
 
+    if level == "part":
+        # Lê direto o arquivo já gerado: não reindexa nem apaga as partes.
+        part_no = as_int(params.get("part"), 0)
+        part_path = None
+        if part_no > 0:
+            candidate = os.path.join(
+                skeleton_dir(ctx), MAP_PARTS_DIR, f"part-{part_no:03d}.md"
+            )
+            part_path = candidate if os.path.isfile(candidate) else None
+        elif dir_path:
+            part_path = _find_part_for_dir(ctx, dir_path)
+        if part_path is None:
+            return TaskResult(
+                False,
+                "parte do mapa não encontrada",
+                hint=(
+                    "Informe `part=<N>` (ou `path=<diretório>`); confira as partes em "
+                    "`code:skeleton level=map`. O mapa dividido exige "
+                    "`split_map=true` (ou `skeleton.map_split: true`)."
+                ),
+                exit_code=2,
+            )
+        return TaskResult(
+            True,
+            f"parte do mapa: {os.path.basename(part_path)}",
+            details=read_text(part_path),
+            artifacts=[part_path],
+            hint="Use `code:skeleton level=dir path=<diretório>` para os símbolos.",
+        )
+
     exclude = config_excludes(ctx.config, params.get("exclude"))
     full = as_bool(params.get("full"))
     target = project_path(ctx)
     previous = {} if full else _load_previous(target)
+    # Versão antiga = parser antigo: o cache não vale (símbolos podem estar errados).
+    if previous.get("version") != PROJECT_VERSION:
+        previous = {}
     previous_files = previous.get("files_index") or {}
 
     files_index: dict[str, dict] = {}
@@ -485,7 +729,7 @@ def handle(ctx, params):
     elapsed = time.time() - started
 
     data = {
-        "version": 2,
+        "version": PROJECT_VERSION,
         "repo": repo,
         "stack": profile.name,
         "generated_at": generated_at,
@@ -512,17 +756,39 @@ def handle(ctx, params):
     )
     skeleton_md = os.path.join(skeleton_dir(ctx), "SKELETON.md")
     write_text(skeleton_md, markdown)
-    map_md = os.path.join(skeleton_dir(ctx), "MAP.md")
-    map_text = _fit_text(
-        _render_map(
-            files_index,
-            tables,
-            generated_at,
-            recent_commits(repo, as_int(skeleton_cfg.get("recent_days"), 180)),
-        ),
-        MAP_BUDGET,
-        "Use `code:skeleton level=dir path=<diretório>` para um diretório específico.",
+
+    recent = recent_commits(repo, as_int(skeleton_cfg.get("recent_days"), 180))
+    split_map = as_bool(
+        params.get("split_map"), as_bool(skeleton_cfg.get("map_split"), False)
     )
+    part_budget = max(
+        as_int(
+            params.get("map_part_chars"),
+            as_int(skeleton_cfg.get("map_part_chars"), MAP_PART_BUDGET),
+        ),
+        2_000,
+    )
+
+    map_md = os.path.join(skeleton_dir(ctx), "MAP.md")
+    part_paths: list[str] = []
+    if split_map:
+        full_map = _render_map(files_index, tables, generated_at, recent, top=None)
+        if len(full_map) <= part_budget:
+            _clear_map_parts(ctx)
+            map_text = full_map
+        else:
+            scores = rank_files(files_index, recent)
+            sections = _map_sections(files_index, scores, None)
+            map_text, part_paths = _write_map_parts(
+                ctx, sections, generated_at, files_index, tables, part_budget
+            )
+    else:
+        _clear_map_parts(ctx)
+        map_text = _fit_text(
+            _render_map(files_index, tables, generated_at, recent),
+            MAP_BUDGET,
+            "Use `code:skeleton level=dir path=<diretório>` para um diretório específico.",
+        )
     write_text(map_md, map_text)
     if (ctx.config.get("knowledge") or {}).get("notes_path"):
         notes_dir = notes_path(ctx)
@@ -537,10 +803,13 @@ def handle(ctx, params):
     if reused:
         summary += f" ({reused} reaproveitado(s))"
 
+    map_details = f"MAP.md: {map_md} ({len(map_text)} bytes) | dirs/: {slices} fatia(s)"
+    if part_paths:
+        map_details += f" | mapa completo em {len(part_paths)} parte(s) em map/"
     details = [
         f"project.json: {target} ({os.path.getsize(target)} bytes)",
         f"SKELETON.md: {skeleton_md} ({len(markdown)} bytes, {symbols_per_file} símbolo(s)/arquivo)",
-        f"MAP.md: {map_md} ({len(map_text)} bytes) | dirs/: {slices} fatia(s)",
+        map_details,
     ]
     if skipped.get("excluded"):
         details.append(f"{skipped['excluded']} arquivo(s) excluído(s) por legacy.exclude/exclude")
@@ -549,11 +818,14 @@ def handle(ctx, params):
     if skipped.get("large_files"):
         details.append(f"{skipped['large_files']} arquivo(s) grande(s) ignorado(s)")
 
-    artifacts = [target, skeleton_md, map_md]
+    artifacts = [target, skeleton_md, map_md, *part_paths]
 
     if level == "map":
+        hint = "Use level=dir path=<diretório> para os símbolos."
+        if part_paths:
+            hint = "Mapa completo em partes: use `level=part part=<N>` ou `level=dir`."
         return TaskResult(True, summary + " — mapa", details=map_text, artifacts=artifacts,
-                          hint="Use level=dir path=<diretório> para os símbolos.")
+                          hint=hint)
 
     if level == "dir":
         grouped = _by_dir(files_index)
@@ -592,7 +864,7 @@ register(
         intent="read",
         description="Gera o esqueleto do código (símbolos, tabelas, imports) sem copiar fontes",
         required=[],
-        optional=["full", "level", "path", "exclude"],
+        optional=["full", "level", "path", "exclude", "split_map", "map_part_chars", "part"],
         handler=handle,
     )
 )

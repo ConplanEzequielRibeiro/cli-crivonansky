@@ -157,3 +157,123 @@ def test_skeleton_reports_unknown_stack(tmp_path):
 
     assert result.success is False
     assert "legacy.stack" in result.summary
+
+
+def test_skeleton_reads_php_with_mixed_html(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "relatorio.php").write_text(
+        "<?php\n"
+        "function montar_relatorio($conn) {\n"
+        '    $sql = "SELECT * FROM tb_alugueis";\n'
+        "?>\n"
+        "<script>var x = '<?php echo 1; ?>';</script>\n"
+        "<?php\n"
+        "}\n"
+        "class Relatorio {\n"
+        "    public function depois_do_html() {\n"
+        '        $q = "SELECT * FROM tb_clientes";\n'
+        "    }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    ctx = TaskContext(
+        config={"legacy": {"repo_path": str(repo)}},
+        workspace=str(tmp_path / "ws"),
+        run_dir=str(tmp_path / "run"),
+    )
+
+    result = skeleton.handle(ctx, {})
+
+    assert result.success
+    data = json.loads(
+        (tmp_path / "ws" / "knowledge" / "skeleton" / "project.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    entry = data["files_index"]["relatorio.php"]
+    assert {"montar_relatorio", "Relatorio", "depois_do_html"} <= {
+        item["name"] for item in entry["symbols"]
+    }
+    assert {"tb_alugueis", "tb_clientes"} <= set(entry["tables"])
+    # O cache de uma versão antiga do parser não é reaproveitado.
+    data["version"] = 2
+    (tmp_path / "ws" / "knowledge" / "skeleton" / "project.json").write_text(
+        json.dumps(data), encoding="utf-8"
+    )
+    result = skeleton.handle(ctx, {})
+    assert "reaproveitado(s)" not in result.summary
+
+
+def _split_context(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for folder in ("cadastro", "aluguel", "relatorios"):
+        directory = repo / folder
+        directory.mkdir()
+        for number in range(1, 21):
+            (directory / f"arquivo{number:02d}.php").write_text(
+                "<?php\n"
+                f"function {folder}_funcao_{number}() {{\n"
+                '    $sql = "SELECT * FROM tb_veiculos";\n'
+                "}\n",
+                encoding="utf-8",
+            )
+    return TaskContext(
+        config={"legacy": {"repo_path": str(repo)}},
+        workspace=str(tmp_path / "ws"),
+        run_dir=str(tmp_path / "run"),
+    )
+
+
+def test_skeleton_split_map_writes_parts_and_index(tmp_path):
+    ctx = _split_context(tmp_path)
+
+    result = skeleton.handle(ctx, {"split_map": True, "map_part_chars": 2000})
+
+    assert result.success
+    skeleton_path = tmp_path / "ws" / "knowledge" / "skeleton"
+    index = (skeleton_path / "MAP.md").read_text(encoding="utf-8")
+    parts = sorted((skeleton_path / "map").glob("part-*.md"))
+
+    assert "índice" in index
+    assert len(parts) > 1
+    assert "map/part-001.md" in index
+    assert all(len(p.read_text(encoding="utf-8")) <= 2200 for p in parts)
+    # Todos os arquivos aparecem no mapa completo (não só os 5 mais relevantes).
+    all_parts = "\n".join(p.read_text(encoding="utf-8") for p in parts)
+    assert all_parts.count("- `arquivo") == 60
+
+    map_result = skeleton.handle(
+        ctx, {"level": "map", "split_map": True, "map_part_chars": 2000}
+    )
+    assert map_result.success and "índice" in map_result.details
+
+
+def test_skeleton_split_map_level_part_returns_slice(tmp_path):
+    ctx = _split_context(tmp_path)
+
+    result = skeleton.handle(ctx, {"split_map": True, "map_part_chars": 2000})
+    assert result.success
+
+    part = skeleton.handle(ctx, {"level": "part", "part": 1})
+    assert part.success and "part-001.md" in part.summary
+    assert "## " in part.details
+
+    by_dir = skeleton.handle(ctx, {"level": "part", "path": "relatorios"})
+    assert by_dir.success
+    assert "relatorios/" in by_dir.details
+
+    missing = skeleton.handle(ctx, {"level": "part", "part": 999})
+    assert missing.success is False
+
+
+def test_skeleton_disabling_split_removes_old_parts(tmp_path):
+    ctx = _split_context(tmp_path)
+    skeleton.handle(ctx, {"split_map": True, "map_part_chars": 2000})
+    assert (tmp_path / "ws" / "knowledge" / "skeleton" / "map").is_dir()
+
+    skeleton.handle(ctx, {"split_map": False})
+
+    parts = list((tmp_path / "ws" / "knowledge" / "skeleton" / "map").glob("*.md"))
+    assert parts == []

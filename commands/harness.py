@@ -20,6 +20,8 @@ class HarnessCommand(Command):
   /harness exec --clip | --file F | --stdin [--yes] [--dry-run]
   /harness run <task> [--param k=v ...] [--yes] [--dry-run]
       ex.: run code:skeleton --level map | run code:skeleton --level dir --path cadastro
+           run code:skeleton --param split_map=true          (mapa completo em partes)
+           run code:skeleton --level part --part 2            (uma parte do mapa)
            run notes:draft --module cadastro | run notes:stale
            run patch:apply --file F --branch ajuste   (preserva encoding/CRLF)
   /harness ask "<pergunta>" [--context map,notes,db,code,docs,rag,skeleton] [--budget TOKENS]

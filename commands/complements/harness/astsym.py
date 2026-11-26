@@ -179,6 +179,113 @@ _FALLBACK[".hpp"] = _FALLBACK[".cpp"]
 _NOT_NAMES = {"if", "for", "while", "switch", "catch", "return", "else", "do", "try"}
 
 
+# ---------------------------------------------------------------------------
+# PHP com HTML misto: mascarar o HTML antes de parsear
+# ---------------------------------------------------------------------------
+# Um arquivo PHP alterna entre HTML e blocos ``<?php … ?>``. O scanner externo
+# do tree-sitter se confunde com tags PHP dentro de strings/comentários do HTML
+# (``<script>var x = '<?php … ?>'</script>``, ``<!-- <?php … ?> -->``) e passa a
+# tratar o resto do arquivo como texto — os símbolos (e as SQLs associadas a
+# eles) depois do HTML somem. Mascarar o HTML por espaços, preservando ``\n`` e
+# ``\r``, entrega ao parser apenas o código PHP com os mesmos números de linha.
+_HEREDOC_START_RE = re.compile(r"<<<[ \t]*(['\"]?)([A-Za-z_]\w*)\1[ \t]*\r?\n")
+_XML_DECL_RE = re.compile(r"<\?xml(?:\s|\?|-|$)", re.I)
+
+
+def _blank(chars: list[str], start: int, end: int) -> None:
+    for index in range(max(start, 0), min(end, len(chars))):
+        if chars[index] not in "\r\n":
+            chars[index] = " "
+
+
+def _skip_quoted(text: str, index: int, limit: int, quote: str) -> int:
+    while index < limit:
+        char = text[index]
+        if char == "\\":
+            index += 2
+            continue
+        if char == quote:
+            return index + 1
+        index += 1
+    return limit
+
+
+def _skip_line_comment(text: str, index: int, limit: int) -> int:
+    # Em PHP, ``?>`` também encerra comentários de uma linha.
+    while index < limit:
+        char = text[index]
+        if char == "\n":
+            return index + 1
+        if char == "?" and text.startswith("?>", index):
+            return index
+        index += 1
+    return limit
+
+
+def _skip_block_comment(text: str, index: int, limit: int) -> int:
+    end = text.find("*/", index)
+    return limit if end == -1 else end + 2
+
+
+def _skip_heredoc(text: str, index: int, limit: int) -> int | None:
+    """Fim do heredoc/nowdoc; ``None`` se ``<<<`` não abrir um heredoc."""
+    match = _HEREDOC_START_RE.match(text, index)
+    if match is None:
+        return None
+    closing = re.compile(
+        rf"^[ \t]*{re.escape(match.group(2))}(?![A-Za-z0-9_])", re.MULTILINE
+    )
+    found = closing.search(text, match.end(), limit)
+    return limit if found is None else found.start()
+
+
+def _php_block_end(text: str, index: int, limit: int) -> int:
+    """Índice logo após o ``?>`` que fecha o bloco PHP (ou ``limit``)."""
+    while index < limit:
+        char = text[index]
+        nxt = text[index + 1] if index + 1 < limit else ""
+        if char == "?" and nxt == ">":
+            return index + 2
+        if char in ("'", '"', "`"):
+            index = _skip_quoted(text, index + 1, limit, char)
+        elif char == "/" and nxt == "/":
+            index = _skip_line_comment(text, index + 2, limit)
+        elif char == "#" and nxt != "[":
+            index = _skip_line_comment(text, index + 1, limit)
+        elif char == "/" and nxt == "*":
+            index = _skip_block_comment(text, index + 2, limit)
+        elif char == "<" and text.startswith("<<<", index):
+            heredoc_end = _skip_heredoc(text, index, limit)
+            index = index + 1 if heredoc_end is None else heredoc_end
+        else:
+            index += 1
+    return limit
+
+
+def php_code_only(text: str) -> str:
+    """Zera o HTML de um arquivo PHP misto, mantendo offsets e números de linha.
+
+    Devolve o próprio ``text`` quando não há nenhuma tag PHP (nada a mascarar).
+    """
+    limit = len(text)
+    chars = list(text)
+    index = 0
+    opened = False
+    while index < limit:
+        start = text.find("<?", index)
+        if start == -1:
+            _blank(chars, index, limit)
+            break
+        if _XML_DECL_RE.match(text, start):  # declaração XML no HTML, não é PHP
+            _blank(chars, index, start + 2)
+            index = start + 2
+            continue
+        opened = True
+        _blank(chars, index, start)
+        index = _php_block_end(text, start + 2, limit)
+    return "".join(chars) if opened else text
+
+
 def ast_grep():
     """Devolve o módulo ``ast_grep_py`` ou ``None`` se não estiver instalado."""
     try:
@@ -209,11 +316,14 @@ def definitions(
     kinds_map = definition_kinds if definition_kinds is not None else DEFINITION_KINDS
 
     language = mapping.get(extension)
+    # PHP/HTML misto: o parser puro se perde no HTML (tags PHP dentro de strings
+    # de `<script>`, comentários HTML etc.) e ignora o código que vem depois.
+    source = php_code_only(text) if language == "php" else text
     if language:
-        found = _definitions_ast(text, language, kinds_map.get(language) or {})
+        found = _definitions_ast(source, language, kinds_map.get(language) or {})
         if found is not None:
             return found
-    return _definitions_regex(text, extension)
+    return _definitions_regex(source, extension, language)
 
 
 def extract_imports(
@@ -228,6 +338,9 @@ def extract_imports(
     pattern = patterns.get(language or "")
     if not pattern:
         return []
+
+    if language == "php":
+        text = php_code_only(text)
 
     values: list[str] = []
     for match in re.finditer(pattern, text, re.MULTILINE):
@@ -376,8 +489,11 @@ def _node_name(node, language: str) -> str:
 # ---------------------------------------------------------------------------
 # Fallback: regex + fim de bloco
 # ---------------------------------------------------------------------------
-def _definitions_regex(text: str, extension: str) -> list[dict]:
-    patterns = _FALLBACK.get(extension) or []
+def _definitions_regex(text: str, extension: str, language: str | None = None) -> list[dict]:
+    patterns = _FALLBACK.get(extension)
+    if patterns is None and language == "php":  # .phtml, .inc, .php5 ...
+        patterns = _FALLBACK.get(".php") or []
+    patterns = patterns or []
     found: list[dict] = []
     seen: set[tuple[str, int]] = set()
 

@@ -106,3 +106,64 @@ def test_ruby_fallback_uses_indentation(monkeypatch):
     bar = next(item for item in found if item["name"] == "bar")
 
     assert bar["end"] >= bar["line"]
+
+
+def test_php_mixed_html_keeps_code_after_html():
+    # Tags PHP dentro de strings de <script> e de comentários HTML confundiam o
+    # parser: o código depois do HTML era ignorado.
+    source = (
+        "<?php\n"
+        "function listar() {\n"
+        '    $sql = "SELECT * FROM tb_veiculos";\n'
+        "?>\n"
+        "<script>var x = '<?php echo 1; ?>';</script>\n"
+        "<!-- <div><?php echo 2; ?></div> -->\n"
+        "<?php\n"
+        "}\n"
+        "class Cadastro {\n"
+        "    public function salvar() {\n"
+        "?>\n"
+        "<form>a</form>\n"
+        "<?php\n"
+        "    }\n"
+        "    public function depois() { return 1; }\n"
+        "}\n"
+    )
+
+    found = {item["name"] for item in astsym.definitions(source, "mixed.php")}
+
+    assert {"listar", "Cadastro", "salvar", "depois"} <= found
+
+
+def test_php_code_only_masks_html_and_preserves_lines():
+    source = (
+        "<?php function a() {}\n"
+        "?>\n"
+        "<p>{ nao conta }</p>\n"
+        "<?php\n"
+        "function b() {}\n"
+    )
+
+    masked = astsym.php_code_only(source)
+
+    assert masked.count("\n") == source.count("\n")
+    assert "function b" in masked
+    assert "<p>" not in masked
+
+
+def test_php_imports_ignore_html(monkeypatch):
+    monkeypatch.setattr(astsym, "ast_grep", lambda: None)
+    source = (
+        "<?php\n"
+        "require_once 'lib.php';\n"
+        "?>\n"
+        "<!-- require_once 'falso.php'; -->\n"
+        "<?php\n"
+        "include 'outro.php';\n"
+    )
+
+    imports = astsym.extract_imports(source, "mix.php")
+
+    assert any("lib.php" in line for line in imports)
+    assert any("outro.php" in line for line in imports)
+    assert not any("falso.php" in line for line in imports)

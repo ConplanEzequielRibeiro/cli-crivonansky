@@ -60,6 +60,10 @@ output:
 #   max_symbols: 12
 #   recent_days: 180
 #   exclude: ["relatorios"]   # equivale a legacy.exclude
+#   # MAP.md completo em várias partes (todas as linhas, não só as 5 por diretório).
+#   # Gera map/part-NNN.md + MAP.md como índice quando passa de map_part_chars.
+#   map_split: true
+#   map_part_chars: 24000
 
 # Monitores e exportação (watch:downloads, kb:export).
 # watch:
