@@ -48,6 +48,7 @@ only the semantic layer (manuals, tickets, db schema and `db:links` output).
 
 | File | Responsibility |
 |---|---|
+| `mcp_server.py` (raiz) | Servidor MCP stdio (só stdlib) que expõe `harness tasks/run/exec/ask` ao OpenCode; chama o CLI com `--no-clipboard` e bloqueia escrita sem `CRIVONANSKY_ALLOW_WRITE=1` |
 | `commands/harness.py` | `/harness` command: parses subcommands and delegates lifecycle ops to `ops.py`; contract subcommands import the plugin lazily |
 | `commands/complements/harness/ops.py` | `install`, `start`, `stop`, `prepare`, `preprocess`, `config` |
 | `commands/complements/harness/install.ps1` | Installs the plugin: creates the venv, installs requirements, generates `workspace/harness.yaml`; `-WithRag` also clones/installs the RAG |

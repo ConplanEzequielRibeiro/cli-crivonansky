@@ -371,6 +371,46 @@ Note que cada requisição cria um executor **novo** (via `core/bootstrap.py:bui
 
 ---
 
+## MCP (OpenCode)
+
+O `mcp_server.py` expõe o harness do Crivonansky como servidor **MCP stdio**, sem
+dependências externas. Ele chama o CLI por subprocesso e oferece:
+
+| Ferramenta | Equivale a |
+|---|---|
+| `crivonansky_tasks` | `harness tasks` |
+| `crivonansky_run` | `harness run <task> --param k=v` |
+| `crivonansky_exec` | `harness exec --stdin` |
+| `crivonansky_ask` | `harness ask "<pergunta>" --context ... --budget ...` |
+
+Exemplo de configuração (`.opencode/opencode.jsonc`):
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "crivonansky": {
+        "type": "local",
+        "command": ["C:/projetos/cli-crivonansky/.venv/Scripts/python.exe",
+                    "C:/projetos/cli-crivonansky/mcp_server.py"],
+        "cwd": "C:/projetos/cli-crivonansky",
+        "codemode": false
+      }
+    }
+  }
+}
+```
+
+- Tarefas `read` rodam direto; `write` exige `CRIVONANSKY_ALLOW_WRITE=1`.
+- O MCP usa `--no-clipboard`, então não sobrescreve a área de transferência.
+- Variáveis: `CRIVONANSKY_PYTHON`, `CRIVONANSKY_CLI`, `CRIVONANSKY_CWD`,
+  `CRIVONANSKY_CONFIG`, `CRIVONANSKY_TIMEOUT`, `CRIVONANSKY_MAX_CHARS`,
+  `CRIVONANSKY_ALLOW_WRITE`, `CRIVONANSKY_MCP_DEBUG`.
+- Teste sem cliente: `python mcp_server.py --selftest`.
+
+---
+
 ## Como criar um plugin
 
 ### Via comando interno

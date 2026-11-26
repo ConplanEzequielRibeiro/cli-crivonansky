@@ -17,14 +17,14 @@ class HarnessCommand(Command):
   /harness prepare [--full] [--sync] [--rag] [--no-docker]
   /harness preprocess [--sync] [--full] [--no-codeknow] [--no-wiki]
   /harness config
-  /harness exec --clip | --file F | --stdin [--yes] [--dry-run]
-  /harness run <task> [--param k=v ...] [--yes] [--dry-run]
+  /harness exec --clip | --file F | --stdin [--yes] [--dry-run] [--no-clipboard]
+  /harness run <task> [--param k=v ...] [--yes] [--dry-run] [--no-clipboard]
       ex.: run code:skeleton --level map | run code:skeleton --level dir --path cadastro
            run code:skeleton --param split_map=true          (mapa completo em partes)
            run code:skeleton --level part --part 2            (uma parte do mapa)
            run notes:draft --module cadastro | run notes:stale
            run patch:apply --file F --branch ajuste   (preserva encoding/CRLF)
-  /harness ask "<pergunta>" [--context map,notes,db,code,docs,rag,skeleton] [--budget TOKENS]
+  /harness ask "<pergunta>" [--context map,notes,db,code,docs,rag,skeleton] [--budget TOKENS] [--no-clipboard]
   /harness state save --clip | list | load [--last | NOME]   (retomar tarefa em outra conversa)
   /harness notes draft <dir> | save --clip | stale
   /harness watch clip [--stop] | watch downloads [--path P] [--stop]
@@ -188,6 +188,7 @@ class HarnessCommand(Command):
 
         yes = "--yes" in args
         dry_run = "--dry-run" in args
+        no_clipboard = "--no-clipboard" in args
 
         source = "clip"
         path = None
@@ -200,7 +201,13 @@ class HarnessCommand(Command):
             source = "stdin"
 
         text = self._read_source(source, path)
-        engine = HarnessEngine(config_path=config_path, interactive=True, yes=yes, dry_run=dry_run)
+        engine = HarnessEngine(
+            config_path=config_path,
+            interactive=True,
+            yes=yes,
+            dry_run=dry_run,
+            sinks=["stdout"] if no_clipboard else None,
+        )
         results, error = engine.handle_text(text, yes_allowed=False)
 
         if error:
@@ -224,6 +231,7 @@ class HarnessCommand(Command):
             yes_allowed=True,
             yes=flags["yes"],
             dry_run=flags["dry_run"],
+            no_clipboard=flags["no_clipboard"],
         )
 
     def _single(
@@ -234,6 +242,7 @@ class HarnessCommand(Command):
         yes_allowed=True,
         yes=False,
         dry_run=False,
+        no_clipboard=False,
     ):
         import yaml
 
@@ -244,6 +253,7 @@ class HarnessCommand(Command):
             interactive=True,
             yes=yes,
             dry_run=dry_run,
+            sinks=["stdout"] if no_clipboard else None,
         )
         block = {"harness": 1, "task": task, "params": params or {}}
         raw = yaml.safe_dump(block, allow_unicode=True, sort_keys=False)
@@ -259,6 +269,7 @@ class HarnessCommand(Command):
 
         context = None
         budget = None
+        no_clipboard = False
         question_parts = []
         index = 0
         while index < len(args):
@@ -272,6 +283,9 @@ class HarnessCommand(Command):
                     print("[harness] --budget deve ser um número de tokens")
                     return False, {"error": "budget inválido"}
                 index += 2
+            elif args[index] == "--no-clipboard":
+                no_clipboard = True
+                index += 1
             else:
                 question_parts.append(args[index])
                 index += 1
@@ -351,13 +365,14 @@ class HarnessCommand(Command):
                 prompt += f"\n\n[redact: {redact.format_stats(stats)}]\n"
 
         copied = False
-        try:
-            import pyperclip
+        if not no_clipboard:
+            try:
+                import pyperclip
 
-            pyperclip.copy(prompt)
-            copied = True
-        except Exception:  # noqa: BLE001
-            copied = False
+                pyperclip.copy(prompt)
+                copied = True
+            except Exception:  # noqa: BLE001
+                copied = False
 
         print(prompt)
         return True, {"copied": copied}
@@ -582,7 +597,7 @@ class HarnessCommand(Command):
     def _parse_run_args(self, args):
         task = None
         params = {}
-        flags = {"yes": False, "dry_run": False}
+        flags = {"yes": False, "dry_run": False, "no_clipboard": False}
 
         index = 0
         while index < len(args):
@@ -592,6 +607,8 @@ class HarnessCommand(Command):
                 flags["yes"] = True
             elif item == "--dry-run":
                 flags["dry_run"] = True
+            elif item == "--no-clipboard":
+                flags["no_clipboard"] = True
             elif item == "--param":
                 index += 1
                 if index < len(args):

@@ -219,6 +219,7 @@ instrução do LLM (contrato, workflow JIT e catálogo).
 | `--full` | `prepare`, `preprocess`, `code:skeleton` | Reindexação completa |
 | `--split-map` / `--map-part-chars N` | `code:skeleton` | Mapa completo em `map/part-NNN.md` + índice; orçamento de cada parte |
 | `--part N` | `code:skeleton` (`level=part`) | Devolve uma parte do mapa dividido |
+| `--no-clipboard` | `run`, `exec`, `ask` | Não copia a saída para o clipboard (usado pelo MCP) |
 | `--force` | `install`, `code:skeleton` | Regenera config / reconstrói índice |
 | `--skip-docker` | `install` | Não exige Docker |
 | `--check-only` | `install` | Só valida |
@@ -353,6 +354,51 @@ parou. Nada é commitado; o caminho gravado é informado.
 
 **Monitores** (só o usuário os inicia; blocos do LLM não podem). Param com `Ctrl+C` ou
 `watch clip --stop` / `watch downloads --stop`.
+
+## Integração com o OpenCode (MCP)
+
+O `mcp_server.py` (raiz do CLI) expõe o harness como servidor **MCP stdio**. Ele não
+tem dependências externas: fala JSON-RPC em stdin/stdout e chama o CLI por
+subprocesso. As ferramentas são:
+
+| Ferramenta | Equivale a |
+|---|---|
+| `crivonansky_tasks` | `harness tasks` (nome, intent e parâmetros) |
+| `crivonansky_run` | `harness run <task> --param k=v` |
+| `crivonansky_exec` | `harness exec --stdin` (política do harness) |
+| `crivonansky_ask` | `harness ask "<pergunta>" --context ... --budget ...` |
+
+Configuração mínima (`.opencode/opencode.jsonc` na raiz do projeto OpenCode):
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "crivonansky": {
+        "type": "local",
+        "command": ["C:/projetos/cli-crivonansky/.venv/Scripts/python.exe",
+                    "C:/projetos/cli-crivonansky/mcp_server.py"],
+        "cwd": "C:/projetos/cli-crivonansky",
+        "codemode": false
+      }
+    }
+  }
+}
+```
+
+Variáveis aceitas: `CRIVONANSKY_PYTHON`, `CRIVONANSKY_CLI`, `CRIVONANSKY_CWD`,
+`CRIVONANSKY_CONFIG`, `CRIVONANSKY_TIMEOUT`, `CRIVONANSKY_MAX_CHARS`,
+`CRIVONANSKY_ALLOW_WRITE` e `CRIVONANSKY_MCP_DEBUG`.
+
+- **Leitura por padrão:** só tarefas `read` rodam. Tarefas `write` voltam como erro
+  explicativo até `CRIVONANSKY_ALLOW_WRITE=1` (e, mesmo assim, use as permissões do
+  OpenCode para exigir aprovação).
+- **Clipboard intacto:** o MCP chama o CLI com `--no-clipboard`; nenhuma chamada
+  sobrescreve a área de transferência.
+- **Skill opcional:** `.opencode/skills/crivonansky/SKILL.md` ensina o agente a
+  navegar (mapa → diretório/parte → arquivo → símbolo) e a respeitar a política.
+- Teste rápido sem cliente MCP: `python mcp_server.py --selftest`.
 
 - `watch clip` (intervalo `--interval_ms`, padrão 500): reage só a blocos `crivonansky`
   novos, ignora o próprio `crivonansky-result`, executa pelo mesmo caminho do `exec`
