@@ -275,6 +275,8 @@ workspace/knowledge/
 | `context:pack` | read | Empacota arquivos em Markdown |
 | `file:read` | read | Lê arquivo com números de linha |
 | `knowledge:verify` | read | Frescor do mapa/vínculos vs. commit e fontes (`deep`, `fail_on_dirty`, `json`) |
+| `audit:removal` | write | Cria ledger de completude para remoção/migração |
+| `audit:verify` | read | Reexecuta o ledger e falha se sobrarem referências ativas |
 | `db:snapshot` | read | Schema do banco (live MySQL/Postgres ou dump do dialeto do perfil) |
 | `db:schema` | read | Markdown de uma tabela |
 | `db:query` | read | SELECT/SHOW/DESCRIBE/EXPLAIN |
@@ -305,7 +307,7 @@ o dono sem importar handlers.
 
 | Pack | Comando | Tarefas |
 |---|---|---|
-| `harness` | `/harness` | `code:*` (6), `db:*` (4), `docs:import`, `rag:*` (3), `context:pack`, `file:read`, `knowledge:verify` |
+| `harness` | `/harness` | `code:*` (6), `db:*` (4), `docs:import`, `rag:*` (3), `context:pack`, `file:read`, `knowledge:verify`, `audit:*` |
 | `harness_exec` | `/harness-exec` | `shell:run`, `py:run`, `docker:exec`, `logs:tail`, `git:run` |
 | `harness_patch` | `/harness-patch` | `patch:apply` |
 | `harness_validate` | `/harness-validate` | `test:run`, `verify`, `lint` |
@@ -406,6 +408,20 @@ O pacote (`harness.brief.v1`) traz frescor, âncora resolvida, arquivos para ler
 primeiro, impacto (tabelas/escritas/leituras/FKs), pipelines de validação, achados,
 omissões e o próximo comando. O budget (padrão 6.000 tokens, teto 12.000) corta a
 lista e registra o que ficou de fora; `--json` devolve o mesmo pacote.
+
+## Auditoria de remoção
+
+```text
+run audit:removal --target tb_veiculos --yes
+run audit:verify --fail_on_leftovers
+run audit:verify --ledger caminho/ledger.json --json
+```
+
+O ledger (`harness.audit-ledger.v1`) cobre oito classes: `schema-object`,
+`embedded-sql`, `include-entrypoint`, `php-reference`, `config-deploy`, `docs`,
+`tests` e `unknown-hit`. `audit:removal` grava em `workspace/knowledge/audits/`
+(`audit.ledgers_path`); `audit:verify` reexecuta as buscas e falha fechado com
+`--fail_on_leftovers` enquanto houver referência ativa ou desconhecida.
 
 > As notas/fichas (`notes:*`) e o `kb:export` foram removidos (R0); o mapa em
 > `workspace/knowledge/skeleton/` é a fonte de navegação.
@@ -556,6 +572,7 @@ Campos relevantes:
 | `skeleton.map_split` / `map_part_chars` | `code:skeleton` | Mapa completo em `map/part-NNN.md` + índice; orçamento de cada parte |
 | `graph.path` / `graph.parser_version` | `code:skeleton`, `db:links` | Store SQLite (padrão `workspace/knowledge/graph.sqlite`) e versão do parser |
 | `brief.default_budget` / `max_budget` / `max_paths` / `max_tables` | `code:brief` | Orçamento em tokens e caps do pacote |
+| `audit.ledgers_path` | `audit:removal` | Pasta dos ledgers (padrão `workspace/knowledge/audits/`) |
 | `output.ask_context` / `ask_budget` / `token_chars` | `ask` | Contextos padrão (`map,db`), orçamento em tokens e caracteres por token |
 | `state.path` | `state:*` | Pasta do estado (padrão: `workspace/state/`); estados antigos são migrados uma vez |
 | `watch.downloads_path` / `watch.patch_branch` | `watch:downloads` | Pasta monitorada (padrão: Downloads do usuário) e branch usada nos patches |

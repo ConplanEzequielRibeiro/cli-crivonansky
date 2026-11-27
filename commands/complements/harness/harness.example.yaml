@@ -90,6 +90,10 @@ output:
 #   max_paths: 15
 #   max_tables: 10
 
+# Auditoria de remoção/migração (M3): ledgers de completude.
+# audit:
+#   ledgers_path: "{{PLUGIN_ROOT}}/workspace/knowledge/audits"
+
 # Monitores (watch:downloads) e estado de tarefa.
 # watch:
 #   downloads_path: "C:/Users/voce/Downloads"
