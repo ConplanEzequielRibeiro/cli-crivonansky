@@ -65,7 +65,7 @@ def handle(ctx, params):
 
 register(
     TaskSpec(
-        name="git:run",
+        name="git:run", pack="harness_exec",
         intent="read",
         description="Executa um comando git no repositório legado",
         required=["args"],

@@ -195,7 +195,7 @@ def handle(ctx, params):
 
 register(
     TaskSpec(
-        name="env:check",
+        name="env:check", pack="core",
         intent="read",
         description="Verifica o ambiente do harness (git, docker, workspace, perfil e RAG opcional)",
         required=[],

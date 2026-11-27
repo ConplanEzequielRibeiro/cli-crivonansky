@@ -216,7 +216,7 @@ def handle(ctx, params):
 
 register(
     TaskSpec(
-        name="patch:apply",
+        name="patch:apply", pack="harness_patch",
         intent="write",
         description=(
             "Aplica um diff unificado preservando encoding/CRLF/BOM do arquivo; "

@@ -150,18 +150,18 @@ def handle_list(ctx, params):
 
 
 register(TaskSpec(
-    name="state:save", intent="write",
+    name="state:save", pack="harness_state", intent="write",
     description="Valida e grava um bloco crivonansky-state em state.path/estado/",
     required=[], optional=["content", "file", "clip"],
     handler=handle_save, preview_fn=preview_save,
 ))
 register(TaskSpec(
-    name="state:load", intent="read",
+    name="state:load", pack="harness_state", intent="read",
     description="Monta o prompt de retomada (estado + mapa) de um estado salvo",
     required=[], optional=["name", "last"], handler=handle_load,
 ))
 register(TaskSpec(
-    name="state:list", intent="read",
+    name="state:list", pack="harness_state", intent="read",
     description="Lista os estados de tarefa salvos",
     required=[], optional=[], handler=handle_list,
 ))

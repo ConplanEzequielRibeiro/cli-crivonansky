@@ -281,7 +281,7 @@ def _intent(params) -> str:
 
 register(
     TaskSpec(
-        name="clean:artifacts",
+        name="clean:artifacts", pack="harness_clean",
         intent="write",
         description="Remove artefatos regeráveis do workspace (knowledge/*, exceto notas legadas)",
         required=[],
@@ -294,7 +294,7 @@ register(
 
 register(
     TaskSpec(
-        name="clean:runs",
+        name="clean:runs", pack="harness_clean",
         intent="write",
         description="Remove execuções antigas de runs/ e compacta o runs.jsonl",
         required=[],

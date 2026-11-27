@@ -79,7 +79,7 @@ def handle_logs(ctx, params):
 
 register(
     TaskSpec(
-        name="docker:exec",
+        name="docker:exec", pack="harness_exec",
         intent="write",
         description="Executa um comando dentro de um contêiner Docker",
         required=["container", "command"],
@@ -91,7 +91,7 @@ register(
 
 register(
     TaskSpec(
-        name="logs:tail",
+        name="logs:tail", pack="harness_exec",
         intent="read",
         description="Lê as últimas linhas de log de um contêiner",
         required=["container"],

@@ -69,7 +69,7 @@ def handle(ctx, params):
 
 register(
     TaskSpec(
-        name="prompt",
+        name="prompt", pack="core",
         intent="read",
         description="Copia o prompt de instrução do LLM para o clipboard",
         required=[],

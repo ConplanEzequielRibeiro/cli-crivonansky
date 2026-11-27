@@ -75,7 +75,7 @@ def handle_py(ctx, params):
 
 register(
     TaskSpec(
-        name="shell:run",
+        name="shell:run", pack="harness_exec",
         intent="write",
         description="Executa um comando no shell do Windows",
         required=["command"],
@@ -86,7 +86,7 @@ register(
 
 register(
     TaskSpec(
-        name="py:run",
+        name="py:run", pack="harness_exec",
         intent="write",
         description="Executa um script ou módulo Python",
         required=[],

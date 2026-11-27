@@ -101,12 +101,12 @@ def handle_downloads(ctx, params):
 
 
 register(TaskSpec(
-    name="watch:clip", intent="read",
+    name="watch:clip", pack="harness_watch", intent="read",
     description="Monitora o clipboard e executa blocos crivonansky novos (com a política e o y/N do exec)",
     required=[], optional=["interval_ms", "stop", "max_cycles"], handler=handle_clip,
 ))
 register(TaskSpec(
-    name="watch:downloads", intent="read",
+    name="watch:downloads", pack="harness_watch", intent="read",
     description="Monitora a pasta de downloads: .patch e estados (sempre com confirmação)",
     required=[], optional=["path", "interval_ms", "stop", "max_cycles", "branch", "include_existing"],
     handler=handle_downloads,

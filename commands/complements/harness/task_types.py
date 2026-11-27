@@ -47,3 +47,5 @@ class TaskSpec:
     intent_fn: Callable[[dict], str] | None = None
     # Mostra o que será gravado antes da confirmação y/N (tarefas de escrita).
     preview_fn: Callable[[TaskContext, dict], str | None] | None = None
+    # Pack dono da tarefa. "core" fica disponível em todos os comandos.
+    pack: str = "harness"

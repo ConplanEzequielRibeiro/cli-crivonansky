@@ -59,7 +59,7 @@ def _handler(name: str):
 for _name in ("test:run", "verify", "lint"):
     register(
         TaskSpec(
-            name=_name,
+            name=_name, pack="harness_validate",
             intent="read",
             description=f"Executa a pipeline '{_name}' definida no harness.yaml",
             required=[],
