@@ -7,13 +7,39 @@ from .. import state as st
 from ..catalog import register
 from ..formatter import cut_head
 from ..task_types import TaskResult, TaskSpec
-from ..util import ensure_dir, is_within, notes_path, read_text, workspace
+from ..util import ensure_dir, is_within, read_text, state_path, workspace
 
 MAP_LIMIT = 6000
 
 
+def _legacy_state_dir(ctx) -> str | None:
+    """Pasta antiga em ``knowledge.notes_path/estado`` (migração única, R0.8)."""
+    configured = ((ctx.config or {}).get("knowledge") or {}).get("notes_path")
+    if not configured:
+        return None
+    from ..config import resolve_path
+
+    return os.path.join(resolve_path(ctx.config, str(configured)), st.STATE_DIR)
+
+
+def _migrate_legacy(ctx, root: str) -> None:
+    legacy = _legacy_state_dir(ctx)
+    target = os.path.join(root, st.STATE_DIR)
+    if not legacy or not os.path.isdir(legacy) or os.path.isdir(target):
+        return
+    import shutil
+
+    shutil.copytree(legacy, target)
+
+
+def _root(ctx) -> str:
+    root = state_path(ctx)
+    _migrate_legacy(ctx, root)
+    return root
+
+
 def _folder(ctx) -> str:
-    return os.path.join(notes_path(ctx), st.STATE_DIR)
+    return os.path.join(_root(ctx), st.STATE_DIR)
 
 
 def _incoming(ctx, params) -> str:
@@ -37,8 +63,8 @@ def _prepare(ctx, params):
     state = st.parse_state(raw)
     folder = _folder(ctx)
     path = os.path.abspath(os.path.join(folder, st.state_filename(state)))
-    if not is_within(path, [notes_path(ctx)]):
-        raise st.StateError("destino fora de notes_path")
+    if not is_within(path, [state_path(ctx)]):
+        raise st.StateError("destino fora de state.path")
     return path, st.render_state(state)
 
 
@@ -78,7 +104,7 @@ def handle_save(ctx, params):
 
 
 def _find(ctx, name: str | None):
-    names = st.list_states(notes_path(ctx))
+    names = st.list_states(_root(ctx))
     if not names:
         return None
     if not name or str(name).lower() == "last":
@@ -117,7 +143,7 @@ def handle_load(ctx, params):
 
 
 def handle_list(ctx, params):
-    names = st.list_states(notes_path(ctx))
+    names = st.list_states(_root(ctx))
     if not names:
         return TaskResult(True, "nenhum estado salvo", details=_folder(ctx))
     return TaskResult(True, f"{len(names)} estado(s)", details="\n".join(f"- {n}" for n in names))
@@ -125,7 +151,7 @@ def handle_list(ctx, params):
 
 register(TaskSpec(
     name="state:save", intent="write",
-    description="Valida e grava um bloco crivonansky-state em notes_path/estado/",
+    description="Valida e grava um bloco crivonansky-state em state.path/estado/",
     required=[], optional=["content", "file", "clip"],
     handler=handle_save, preview_fn=preview_save,
 ))

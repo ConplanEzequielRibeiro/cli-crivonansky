@@ -1,6 +1,7 @@
 """Utilitários compartilhados pelas tarefas."""
 
 import os
+import re
 
 from .config import get_legacy_path, resolve_path as _resolve_config_path
 
@@ -13,12 +14,27 @@ def workspace(ctx) -> str:
     return os.path.abspath(ctx.workspace)
 
 
-def notes_path(ctx) -> str:
-    """Pasta das fichas: ``knowledge.notes_path`` ou ``workspace/knowledge/notes``."""
-    configured = ((ctx.config or {}).get("knowledge") or {}).get("notes_path")
+def state_path(ctx) -> str:
+    """Pasta do estado de tarefa: ``state.path`` ou ``workspace/state``."""
+    configured = ((ctx.config or {}).get("state") or {}).get("path")
     if configured:
         return os.path.abspath(_resolve_config_path(ctx.config, str(configured)))
-    return os.path.join(workspace(ctx), "knowledge", "notes")
+    return os.path.join(workspace(ctx), "state")
+
+
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _ascii(char: str) -> str:
+    import unicodedata
+
+    return unicodedata.normalize("NFKD", char).encode("ascii", "ignore").decode("ascii")
+
+
+def slugify(value: str) -> str:
+    """Slug estável para nome de arquivo de estado (sem acento, sem path)."""
+    plain = re.sub(r"[^\x00-\x7f]", lambda m: _ascii(m.group(0)), str(value).lower())
+    return _SLUG_RE.sub("-", plain).strip("-") or "estado"
 
 
 def allowed_roots(ctx) -> list[str]:
@@ -31,9 +47,6 @@ def allowed_roots(ctx) -> list[str]:
         roots.append(os.path.abspath(value))
     if not roots:
         roots = [repo, ws]
-    notes = notes_path(ctx)
-    if notes not in roots:
-        roots.append(notes)
     return roots
 
 

@@ -54,7 +54,26 @@ def test_save_then_load_rebuilds_resume_prompt(tmp_path):
     assert "crivonansky" in loaded.details
 
 
-def test_save_stays_inside_notes_path_and_list(tmp_path):
+def test_migrates_legacy_notes_state(tmp_path):
+    legacy = tmp_path / "legacy-notas" / "estado"
+    legacy.mkdir(parents=True)
+    (legacy / "old.md").write_text("---\ntarefa: x\n---\n", encoding="utf-8")
+    ctx = TaskContext(
+        config={
+            "legacy": {"repo_path": str(tmp_path / "repo")},
+            "knowledge": {"notes_path": str(tmp_path / "legacy-notas")},
+        },
+        workspace=str(tmp_path / "ws"),
+        run_dir=str(tmp_path / "run"),
+    )
+
+    result = state_task.handle_list(ctx, {})
+
+    assert "1 estado(s)" == result.summary
+    assert (tmp_path / "ws" / "state" / "estado" / "old.md").is_file()
+
+
+def test_save_stays_inside_state_path_and_list(tmp_path):
     ctx = _ctx(tmp_path)
     assert "nenhum estado" in state_task.handle_list(ctx, {}).summary
     state_task.handle_save(ctx, {"content": BLOCK.replace("Ajuste do cadastro de veículo", "../../fuga")})
@@ -62,7 +81,7 @@ def test_save_stays_inside_notes_path_and_list(tmp_path):
     result = state_task.handle_list(ctx, {})
 
     assert "1 estado(s)" == result.summary
-    assert (tmp_path / "ws" / "knowledge" / "notes" / "estado").is_dir()
+    assert (tmp_path / "ws" / "state" / "estado").is_dir()
     assert not (tmp_path / "fuga.md").exists()
 
 

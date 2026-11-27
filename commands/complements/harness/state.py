@@ -1,7 +1,7 @@
 """Estado de tarefa (``crivonansky-state``): contrato, validação e prompt de retomada.
 
 Permite continuar uma tarefa numa conversa nova do chat: o Claude encerra com um
-bloco ``crivonansky-state``; o harness grava em ``<notes_path>/estado/`` e depois
+bloco ``crivonansky-state``; o harness grava em ``<state.path>/estado/`` e depois
 monta o prompt de abertura (estado + mapa). Funções puras.
 """
 
@@ -11,7 +11,7 @@ from datetime import date
 
 import yaml
 
-from .notes import slugify
+from .util import slugify
 
 STATE_RE = re.compile(r"```crivonansky-state\s*\n(.*?)```", re.DOTALL)
 REQUIRED = ("tarefa", "decisoes", "arquivos", "pendencias", "proximo_passo")

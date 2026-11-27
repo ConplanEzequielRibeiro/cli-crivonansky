@@ -9,7 +9,7 @@ from ..filters import iter_files
 from ..profiles import resolve_profile
 from ..runner import run_process
 from ..task_types import TaskResult, TaskSpec
-from ..util import legacy_repo, looks_like_path, notes_path
+from ..util import legacy_repo, looks_like_path
 from .rag import tools_problem
 
 FILE_COUNT_CAP = 20000
@@ -101,17 +101,6 @@ def handle(ctx, params):
         f"- tamanho do workspace: knowledge {_mb(knowledge_size)} | runs {_mb(runs_size)} "
         "(limpe com `clean:artifacts`/`clean:runs`)"
     )
-
-    if ((ctx.config.get("knowledge") or {}).get("notes_path")):
-        notes_dir = notes_path(ctx)
-        if not os.path.isdir(notes_dir):
-            lines.append(f"- AVISO: knowledge.notes_path não existe: {notes_dir}")
-        elif not os.path.isdir(os.path.join(notes_dir, ".git")):
-            lines.append(
-                f"- AVISO: knowledge.notes_path não é um repositório git: {notes_dir}"
-            )
-        else:
-            add(_line("notas", True, notes_dir), True)
 
     plugin_python = get_tool_path(ctx.config, "python")
     if plugin_python and looks_like_path(plugin_python):

@@ -36,7 +36,6 @@ from ..util import (
     as_list,
     ensure_dir,
     legacy_repo,
-    notes_path,
     read_text,
     workspace,
     write_json,
@@ -790,10 +789,6 @@ def handle(ctx, params):
             "Use `code:skeleton level=dir path=<diretório>` para um diretório específico.",
         )
     write_text(map_md, map_text)
-    if (ctx.config.get("knowledge") or {}).get("notes_path"):
-        notes_dir = notes_path(ctx)
-        if os.path.isdir(notes_dir):
-            write_text(os.path.join(notes_dir, "MAPA.md"), map_text)
     slices = _write_slices(ctx, files_index)
 
     summary = (
