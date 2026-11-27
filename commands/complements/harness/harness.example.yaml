@@ -50,8 +50,8 @@ output:
   # Limite de saltos (busca -> leitura -> símbolo) por pergunta.
   max_hops: 6
   # `ask`: contextos padrão e orçamento em tokens (estimativa: caracteres / token_chars).
-  # Prioridade no corte: pergunta > notes > map > db > code > docs > rag.
-  ask_context: "map,notes,db"
+  # Prioridade no corte: pergunta > map > skeleton > db > code > docs > rag.
+  ask_context: "map,db"
   # ask_budget: 6000
   # token_chars: 4
 
@@ -65,21 +65,18 @@ output:
 #   map_split: true
 #   map_part_chars: 24000
 
-# Monitores e exportação (watch:downloads, kb:export).
+# Monitores (watch:downloads) e estado de tarefa.
 # watch:
 #   downloads_path: "C:/Users/voce/Downloads"
 #   patch_branch: ajuste-chat
-# kb:
-#   export_path: "D:/kb_export"
-#   max_chars: 200000
 
-# Fichas de conhecimento (repositório git próprio, fora do workspace).
-# Sem este campo: workspace/knowledge/notes/
-# knowledge:
-#   notes_path: "D:/conhecimento/sgg-notas"
+# Estado de tarefa (retomada em outra conversa).
+# Sem este campo: workspace/state/
+# state:
+#   path: "D:/harness/state"
 
 hooks:
-  tasks: ["code:skeleton", "notes:stale"]
+  tasks: ["code:skeleton"]
   log: runs/hooks.log
 
 policy:

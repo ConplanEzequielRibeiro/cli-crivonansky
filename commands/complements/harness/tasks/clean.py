@@ -1,6 +1,6 @@
 """Tarefas de limpeza do workspace: ``clean:artifacts`` e ``clean:runs``.
 
-Nunca tocam o repositório legado, o ``harness.yaml`` nem ``knowledge/notes``
+Nunca tocam o repositório legado, o ``harness.yaml`` nem ``knowledge/notes`` legado
 (as fichas são conhecimento revisado, não artefato descartável).
 """
 
@@ -283,7 +283,7 @@ register(
     TaskSpec(
         name="clean:artifacts",
         intent="write",
-        description="Remove artefatos regeráveis do workspace (knowledge/*, exceto notes)",
+        description="Remove artefatos regeráveis do workspace (knowledge/*, exceto notas legadas)",
         required=[],
         optional=["scope", "dry_run"],
         handler=handle_artifacts,
