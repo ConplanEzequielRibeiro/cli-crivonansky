@@ -67,3 +67,43 @@ def test_cli_respects_plugins_enabled_false(tmp_path):
 
     assert ok is False
     assert data["error"] == "plugin desabilitado"
+
+
+def _legacy_config(tmp_path, enabled):
+    (tmp_path / "repo").mkdir(exist_ok=True)
+    config = {
+        "workspace": str(tmp_path / "ws"),
+        "legacy": {"repo_path": str(tmp_path / "repo")},
+        "compat": {"forward_legacy": enabled},
+    }
+    path = tmp_path / f"harness-{enabled}.yaml"
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    return str(path)
+
+
+def test_forward_legacy_routes_to_owner(tmp_path):
+    path = _legacy_config(tmp_path, True)
+
+    ok, data = cli.execute("harness", ["run", "state:list", "--config", path])
+
+    assert ok is True
+    assert data["status"] == "success"
+
+
+def test_forward_legacy_can_be_disabled(tmp_path):
+    path = _legacy_config(tmp_path, False)
+
+    ok, data = cli.execute("harness", ["run", "state:list", "--config", path])
+
+    assert ok is False
+    assert data["status"] == "denied"
+
+
+def test_prompt_per_pack():
+    from commands.complements.harness_core import prompting
+
+    text = prompting.render("harness_exec")
+
+    assert "/harness-exec" in text
+    assert "shell:run" in text
+    assert "crivonansky" in text

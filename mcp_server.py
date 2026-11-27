@@ -160,20 +160,20 @@ def _truncate(text: str) -> str:
     )
 
 
-def _invoke(argv: list[str], stdin_text: str | None = None) -> tuple[str, bool]:
-    """Roda ``crivonansky.py harness <argv>`` e devolve ``(texto, is_error)``."""
-    command = [PYTHON, CLI, "harness"]
+def _invoke(argv: list[str], stdin_text: str | None = None, command: str = "harness") -> tuple[str, bool]:
+    """Roda ``crivonansky.py <command> <argv>`` e devolve ``(texto, is_error)``."""
+    base = [PYTHON, CLI, command]
     if CONFIG:
-        command += ["--config", CONFIG]
-    command += argv + ["--no-clipboard"]
+        base += ["--config", CONFIG]
+    base += argv + ["--no-clipboard"]
 
     environment = os.environ.copy()
     environment.setdefault("PYTHONIOENCODING", "utf-8")
-    _log("exec: " + " ".join(command))
+    _log("exec: " + " ".join(base))
 
     try:
         process = subprocess.run(
-            command,
+            base,
             cwd=CWD,
             input=stdin_text,
             capture_output=True,
@@ -185,7 +185,7 @@ def _invoke(argv: list[str], stdin_text: str | None = None) -> tuple[str, bool]:
         )
     except subprocess.TimeoutExpired:
         return (
-            f"timeout após {TIMEOUT}s ao executar `harness {argv[0]}`; "
+            f"timeout após {TIMEOUT}s ao executar `{command} {argv[0]}`; "
             "aumente CRIVONANSKY_TIMEOUT ou use parâmetros mais específicos.",
             True,
         )
@@ -206,6 +206,21 @@ def _invoke(argv: list[str], stdin_text: str | None = None) -> tuple[str, bool]:
 # ---------------------------------------------------------------------------
 # Ferramentas
 # ---------------------------------------------------------------------------
+def _command_for(task: str) -> str:
+    """Comando dono da tarefa (harness, harness-exec, ...)."""
+    try:
+        if ROOT not in sys.path:
+            sys.path.insert(0, ROOT)
+        from commands.complements.harness_core.packs import owner_of, pack_command
+
+        owner = owner_of(task)
+        if owner and owner != "core":
+            return pack_command(owner) or "harness"
+    except Exception:  # noqa: BLE001 - sem catálogo, cai no mapeamento
+        pass
+    return "harness"
+
+
 def tool_tasks(_arguments: dict) -> tuple[str, bool]:
     catalog = _catalog()
     if catalog is None:
@@ -214,11 +229,14 @@ def tool_tasks(_arguments: dict) -> tuple[str, bool]:
             f"{_TASKS_ERROR or 'plugin não instalado'}. Rode `harness install`.",
             True,
         )
-    lines = ["Tarefas do harness (nome [intent] descrição — parâmetros):", ""]
+    lines = ["Tarefas do harness (nome [intent] (comando) descrição — parâmetros):", ""]
     for name, meta in sorted(catalog.items()):
         params = list(meta.get("required") or []) + list(meta.get("optional") or [])
         suffix = f" — {', '.join(params)}" if params else ""
-        lines.append(f"- `{name}` [{meta['intent']}] {meta['description']}{suffix}")
+        lines.append(
+            f"- `{name}` [{meta['intent']}] ({_command_for(name)}) "
+            f"{meta['description']}{suffix}"
+        )
     return "\n".join(lines), False
 
 
@@ -258,7 +276,7 @@ def tool_run(arguments: dict) -> tuple[str, bool]:
         argv.append("--dry-run")
     if write_task:
         argv.append("--yes")
-    return _invoke(argv)
+    return _invoke(argv, command=_command_for(task))
 
 
 def tool_exec(arguments: dict) -> tuple[str, bool]:
@@ -268,7 +286,15 @@ def tool_exec(arguments: dict) -> tuple[str, bool]:
     argv = ["exec", "--stdin"]
     if arguments.get("dry_run"):
         argv.append("--dry-run")
-    return _invoke(argv, stdin_text=text)
+    import re
+
+    match = re.search(r"^\s*task:\s*([\w:.-]+)", text, re.M)
+    command = _command_for(match.group(1)) if match else "harness"
+    return _invoke(argv, stdin_text=text, command=command)
+
+
+def tool_plugins(_arguments: dict) -> tuple[str, bool]:
+    return _invoke(["config"])
 
 
 def tool_ask(arguments: dict) -> tuple[str, bool]:
@@ -337,7 +363,7 @@ TOOLS = [
     },
     {
         "name": "ask",
-        "description": "Monta um prompt com contexto do harness (mapa, notas, banco, docs, RAG) e o devolve.",
+        "description": "Monta um prompt com contexto do harness (mapa, banco, docs, RAG) e o devolve.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -352,6 +378,15 @@ TOOLS = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "plugins",
+        "description": "Lista packs, comandos, caminhos e se cada pack está habilitado.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+    },
 ]
 
 HANDLERS = {
@@ -359,6 +394,7 @@ HANDLERS = {
     "run": tool_run,
     "exec": tool_exec,
     "ask": tool_ask,
+    "plugins": tool_plugins,
 }
 
 

@@ -20,6 +20,17 @@ def _extract_config(argv: list[str]) -> tuple[str | None, list[str]]:
     return path, args
 
 
+def _forward_enabled(config_path: str | None) -> bool:
+    """Compatibilidade: `/harness run <task>` encaminha para o pack dono."""
+    try:
+        from .config import load_config
+
+        config = load_config(config_path)
+    except Exception:  # noqa: BLE001 - sem config, mantém o comportamento antigo
+        return True
+    return (config.get("compat") or {}).get("forward_legacy", True) is not False
+
+
 def _engine(pack, config_path=None, yes=False, dry_run=False, no_clipboard=False):
     from .engine import HarnessEngine
 
@@ -188,6 +199,12 @@ def execute(pack: str, argv: list[str]) -> tuple[bool, dict]:
         if not task:
             print(f"[{_manifest(pack).COMMAND}] informe a tarefa")
             return False, {"error": "tarefa ausente"}
+        owner = packs.owner_of(task)
+        if owner and owner not in (pack, "core") and _forward_enabled(config_path):
+            command = packs.pack_command(owner)
+            print(f"[deprecado] `{task}` pertence a /{command}; encaminhando.")
+            forwarded = (["--config", config_path] if config_path else []) + ["run", *rest]
+            return execute(owner, forwarded)
         return _single(
             pack,
             config_path,
@@ -201,8 +218,22 @@ def execute(pack: str, argv: list[str]) -> tuple[bool, dict]:
         return _tasks(pack)
     if sub == "runs":
         return _runs(pack, config_path, rest)
-    if sub in ("prompt", "env:check"):
-        return _single(pack, config_path, sub, {})
+    if sub == "prompt":
+        if pack == "harness":
+            return _single(pack, config_path, "prompt", {})
+        from .prompting import render
+
+        text = render(pack)
+        try:
+            import pyperclip
+
+            pyperclip.copy(text)
+        except Exception:  # noqa: BLE001
+            pass
+        print(text)
+        return True, {"pack": pack}
+    if sub == "env:check":
+        return _single(pack, config_path, "env:check", {})
 
     print(f"[{_manifest(pack).COMMAND}] subcomando desconhecido: {sub}")
     return False, {"error": "subcomando desconhecido"}

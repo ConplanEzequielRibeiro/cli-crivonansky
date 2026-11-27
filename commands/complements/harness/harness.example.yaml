@@ -13,6 +13,10 @@ plugins:
   watch: {enabled: true}
   clean: {enabled: true}
 
+# Uma release de compatibilidade: `/harness run <task>` encaminha para o pack dono.
+compat:
+  forward_legacy: true
+
 legacy:
   # Perfil de stack: php-mysql (padrão), java-oracle, dotnet-sqlserver,
   # ruby-postgres, node-postgres ou custom (com overrides abaixo).
