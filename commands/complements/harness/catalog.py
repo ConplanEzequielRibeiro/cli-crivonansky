@@ -34,7 +34,6 @@ def load_tasks() -> None:
         jit,
         kb,
         links,
-        notes,
         patch,
         pipelines,
         prompt,

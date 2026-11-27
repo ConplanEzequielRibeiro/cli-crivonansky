@@ -1,8 +1,8 @@
 """Inventário congelado das tarefas e mapa de donos (B0.2).
 
 Este teste é o contrato do desmembramento: nenhuma tarefa pode sumir, mudar de
-assinatura ou de dono sem uma atualização explícita. A fase R0.12 atualiza este
-mapa para 33 tarefas, após a remoção das notas (`notes:*` e `kb:export`).
+assinatura ou de dono sem uma atualização explícita. A R0.2 removeu as três tarefas
+`notes:*` (34 restantes); a R0.3 remove `kb:export` (33) e a R0.12 finaliza o mapa.
 """
 
 from collections import Counter
@@ -40,9 +40,6 @@ EXPECTED = {
     "kb:export": ("write", [], ["out", "max_chars"]),
     "lint": ("read", [], ["filter"]),
     "logs:tail": ("read", ["container"], ["lines"]),
-    "notes:draft": ("read", ["module"], []),
-    "notes:save": ("write", [], ["content", "file", "clip"]),
-    "notes:stale": ("read", [], []),
     "patch:apply": ("write", ["diff"], ["verify", "branch", "allow_dirty", "strip"]),
     "prompt": ("read", [], []),
     "py:run": ("write", [], ["script", "module", "args", "cwd"]),
@@ -86,9 +83,6 @@ OWNER = {
     "kb:export": "harness",
     "lint": "harness_validate",
     "logs:tail": "harness_exec",
-    "notes:draft": "harness",
-    "notes:save": "harness",
-    "notes:stale": "harness",
     "patch:apply": "harness_patch",
     "prompt": "core",
     "py:run": "harness_exec",
@@ -122,7 +116,7 @@ def _catalog():
 
 
 def test_inventory_count():
-    assert len(_catalog()) == 37
+    assert len(_catalog()) == 34
 
 
 def test_inventory_matches_frozen_names():
@@ -147,7 +141,7 @@ def test_owner_map_covers_every_task():
 
 def test_target_pack_distribution():
     assert Counter(OWNER.values()) == {
-        "harness": 19,
+        "harness": 16,
         "harness_exec": 5,
         "harness_patch": 1,
         "harness_validate": 3,

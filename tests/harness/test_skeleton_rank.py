@@ -1,9 +1,8 @@
-"""Ranking por commits recentes, skeleton.max_symbols e --clip do notes:save."""
+"""Ranking por commits recentes e skeleton.max_symbols."""
 
 import subprocess
 
 from commands.complements.harness.task_types import TaskContext
-from commands.complements.harness.tasks import notes as notes_task
 from commands.complements.harness.tasks import skeleton
 
 
@@ -88,23 +87,3 @@ def test_skeleton_exclude_config_alias(tmp_path):
     data = json.loads((tmp_path / "ws/knowledge/skeleton/project.json").read_text(encoding="utf-8"))
     assert data["files"] == 0
 
-
-def test_notes_save_clip_reads_clipboard(tmp_path, monkeypatch):
-    import sys
-    import types
-
-    from commands.complements.harness import notes
-
-    repo = tmp_path / "repo"
-    (repo / "m").mkdir(parents=True)
-    (repo / "m" / "a.php").write_text("<?php\n", encoding="utf-8")
-    meta = {"modulo": "m", "tags": [], "tabelas": [], "arquivos": ["m/a.php"],
-            "hash_fonte": "", "revisado": False, "atualizado_em": ""}
-    text = notes.render_note(meta, "# M\n\n" + notes.skeleton_body())
-    fake = types.SimpleNamespace(paste=lambda: text)
-    monkeypatch.setitem(sys.modules, "pyperclip", fake)
-
-    result = notes_task.handle_save(_ctx(tmp_path), {"clip": True})
-
-    assert result.success, result.summary
-    assert (tmp_path / "ws/knowledge/notes/m.md").is_file()
