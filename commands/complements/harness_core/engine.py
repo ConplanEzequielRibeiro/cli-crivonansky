@@ -53,10 +53,12 @@ class HarnessEngine:
         dry_run: bool = False,
         sinks: list[str] | None = None,
         config: dict | None = None,
+        pack: str | None = None,
     ):
         self.config = config if config is not None else load_config(config_path)
         self.workspace = get_workspace(self.config)
         self.output = get_output(self.config)
+        self.pack = pack
         self.interactive = interactive
         self.yes = yes
         self.dry_run = dry_run
@@ -123,6 +125,40 @@ class HarnessEngine:
                 [],
                 raw,
             )
+
+        if self.pack and spec.pack not in (self.pack, "core"):
+            from .packs import pack_command
+
+            command = pack_command(spec.pack) or spec.pack
+            return self._finish(
+                block.id,
+                block.task,
+                "denied",
+                3,
+                start,
+                f"tarefa `{block.task}` pertence ao plugin /{command}",
+                f"Use `/{command} run {block.task} ...`.",
+                [],
+                raw,
+            )
+
+        if origin == "llm" and self.pack:
+            from .packs import manifests
+
+            allowed = set((self.config.get("policy") or {}).get("llm_allowed_tasks") or [])
+            denied = set(getattr(manifests()[self.pack], "DEFAULT_LLM_DENIED", ()) or ())
+            if block.task in denied and block.task not in allowed:
+                return self._finish(
+                    block.id,
+                    block.task,
+                    "denied",
+                    3,
+                    start,
+                    f"negado: `{block.task}` não pode ser pedida por bloco do LLM",
+                    "",
+                    [],
+                    raw,
+                )
 
         missing = [name for name in spec.required if name not in block.params]
         if missing:
