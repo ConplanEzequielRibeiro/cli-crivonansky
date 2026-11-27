@@ -78,6 +78,11 @@ output:
 #   map_split: true
 #   map_part_chars: 24000
 
+# Store SQLite (M1): arquivos, símbolos, imports, operações SQL e FKs.
+# graph:
+#   path: "{{PLUGIN_ROOT}}/workspace/knowledge/graph.sqlite"
+#   parser_version: 3
+
 # Monitores (watch:downloads) e estado de tarefa.
 # watch:
 #   downloads_path: "C:/Users/voce/Downloads"

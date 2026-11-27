@@ -813,12 +813,23 @@ def handle(ctx, params):
         f"{len(links)} vínculo(s), {len(fks)} FK(s), {len(includes)} include/import"
     )
 
+    store_note = ""
+    try:
+        from .. import graphdb
+
+        store = graphdb.sync_links(ctx, links, fks, includes)
+        store_note = f"store: {store['ops']} operação(ões), {store['fks']} FK(s)"
+    except Exception as exc:  # noqa: BLE001 - store é complementar
+        store_note = f"store: falha ({exc})"
+
     summary = (
         f"{len(links)} vínculo(s) código↔tabela, {len(fks)} FK(s) inferida(s), "
         f"{len(includes)} include/require/import em {len(files)} arquivo(s) "
         f"({format_duration(elapsed)})"
     )
     notes = [f"stack: {profile.name} | dialeto SQL: {profile.db_dialect}"]
+    if store_note:
+        notes.append(store_note)
     if skipped.get("build_artifacts"):
         notes.append(f"{skipped['build_artifacts']} bundle(s) minificado(s) ignorado(s)")
     if skipped.get("large_files"):

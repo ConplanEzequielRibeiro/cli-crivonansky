@@ -818,6 +818,20 @@ def handle(ctx, params):
     except Exception as exc:  # noqa: BLE001 - manifesto é complementar
         manifest_error = str(exc)
 
+    store_note = ""
+    try:
+        from .. import graphdb
+
+        parser_version = int(
+            (ctx.config.get("graph") or {}).get("parser_version")
+            or data.get("version")
+            or 0
+        )
+        store = graphdb.sync_skeleton(ctx, files_index, profile, parser_version)
+        store_note = f"store: {store['files']} arquivo(s) em {store['db']}"
+    except Exception as exc:  # noqa: BLE001 - store é complementar
+        store_note = f"store: falha ({exc})"
+
     summary = (
         f"{len(files_index)} arquivo(s), {data['symbols']} símbolo(s), "
         f"{len(tables)} tabela(s) em {elapsed:.1f}s"
@@ -837,6 +851,8 @@ def handle(ctx, params):
         details.append(f"manifesto: {manifest_path}")
     elif manifest_error:
         details.append(f"manifesto: falha ({manifest_error})")
+    if store_note:
+        details.append(store_note)
     if skipped.get("excluded"):
         details.append(f"{skipped['excluded']} arquivo(s) excluído(s) por legacy.exclude/exclude")
     if skipped.get("build_artifacts"):

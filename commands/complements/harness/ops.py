@@ -101,6 +101,18 @@ def _add_tools_info(info: dict, config_path_arg: str | None = None) -> None:
     except Exception:  # noqa: BLE001 - informativo
         pass
 
+    try:
+        from types import SimpleNamespace
+
+        from commands.complements.harness import graphdb
+        from commands.complements.harness_core.config import get_workspace
+
+        ctx = SimpleNamespace(config=config, workspace=get_workspace(config))
+        info["graph"] = graphdb.db_path(ctx)
+        info["graph_exists"] = os.path.isfile(info["graph"])
+    except Exception:  # noqa: BLE001 - informativo
+        pass
+
     for label, keys in (
         ("python", ("python",)),
         ("rg", ("rg",)),
