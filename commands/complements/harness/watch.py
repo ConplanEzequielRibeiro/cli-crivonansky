@@ -12,7 +12,7 @@ import time
 
 import yaml
 
-from . import notes, state
+from . import state
 from .contract import extract_blocks
 
 STOP_FILE = "watch.stop"
@@ -90,11 +90,8 @@ def classify(path: str, text: str, patch_branch: str | None = None):
             except state.StateError:
                 return None
             return "state:save", {"content": text}
-        try:
-            notes.parse_note(text)
-        except notes.NoteError:
-            return None
-        return "notes:save", {"content": text}
+        # Fichas/notas foram removidas na R0.6; `.md`/`.txt` sem estado é ignorado.
+        return None
     return None
 
 

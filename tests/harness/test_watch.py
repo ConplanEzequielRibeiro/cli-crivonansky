@@ -3,7 +3,7 @@
 import os
 import time
 
-from commands.complements.harness import notes, watch
+from commands.complements.harness import watch
 from commands.complements.harness.task_types import TaskContext
 from commands.complements.harness.tasks import watch as watch_task
 
@@ -37,7 +37,6 @@ def test_classify_files():
     diff = "--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n"
     assert watch.classify("a.patch", diff, "br") == ("patch:apply", {"diff": diff, "branch": "br"})
     assert watch.classify("a.patch", "sem hunk") is None
-    assert watch.classify("ficha.md", notes.model_text())[0] == "notes:save"
     state_text = "```crivonansky-state\ntarefa: t\ndecisoes: []\narquivos: []\npendencias: []\nproximo_passo: p\n```"
     assert watch.classify("estado.md", state_text)[0] == "state:save"
     assert watch.classify("foto.png", "x") is None
