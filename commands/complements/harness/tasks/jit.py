@@ -2,7 +2,7 @@
 
 Primitivas expostas ao LLM:
 
-* ``code:search``  — ripgrep no repositório (ou nas notas auditadas);
+* ``code:search``  — ripgrep no repositório;
 * ``code:read``    — leitura fatiada por intervalo de linhas;
 * ``code:outline`` — imports + assinaturas de um arquivo;
 * ``code:symbol``  — definições (esqueleto/ast-grep) e referências (ripgrep).
@@ -572,7 +572,7 @@ register(
     TaskSpec(
         name="code:search",
         intent="read",
-        description="Busca textual (ripgrep) no repositório ou nas notas",
+        description="Busca textual (ripgrep) no repositório",
         required=["pattern"],
         optional=["path", "glob", "max_results", "scope"],
         handler=handle_search,

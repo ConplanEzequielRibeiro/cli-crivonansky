@@ -107,7 +107,7 @@ register(TaskSpec(
 ))
 register(TaskSpec(
     name="watch:downloads", intent="read",
-    description="Monitora a pasta de downloads: .patch, fichas e estados (sempre com confirmação)",
+    description="Monitora a pasta de downloads: .patch e estados (sempre com confirmação)",
     required=[], optional=["path", "interval_ms", "stop", "max_cycles", "branch", "include_existing"],
     handler=handle_downloads,
 ))

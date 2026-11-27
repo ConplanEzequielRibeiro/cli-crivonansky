@@ -1,7 +1,7 @@
 """Tarefas de limpeza do workspace: ``clean:artifacts`` e ``clean:runs``.
 
 Nunca tocam o repositório legado, o ``harness.yaml`` nem ``knowledge/notes`` legado
-(as fichas são conhecimento revisado, não artefato descartável).
+(dados legados não são artefatos descartáveis).
 """
 
 import json
