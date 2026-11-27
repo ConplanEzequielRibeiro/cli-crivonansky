@@ -10,5 +10,5 @@ DEFAULT_LLM_DENIED = ['shell:run', 'py:run', 'docker:exec', 'git:run']
 
 
 def load_tasks():
-    """Importa os handlers deste pack (implementado na fase D2)."""
-    return None
+    """Importa os handlers deste pack (lazy)."""
+    from .tasks import docker, git, shell  # noqa: F401

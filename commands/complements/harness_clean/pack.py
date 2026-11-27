@@ -10,5 +10,5 @@ DEFAULT_LLM_DENIED = ['clean:artifacts', 'clean:runs']
 
 
 def load_tasks():
-    """Importa os handlers deste pack (implementado na fase D2)."""
-    return None
+    """Importa os handlers deste pack (lazy)."""
+    from .tasks import clean  # noqa: F401
