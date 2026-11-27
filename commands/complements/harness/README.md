@@ -435,6 +435,17 @@ O runner usa 5 tarefas-ouro da fixture (tabelas `tb_alugueis`, `tb_veiculos`,
 leituras irrelevantes, validação perdida, tokens e truncamentos. Resultado atual:
 **5/5 no primeiro arquivo, recall 1.0, 671 tokens**.
 
+## Benchmark
+
+```powershell
+python commands/complements/harness/scripts/benchmark.py --files 2000
+python commands/complements/harness/scripts/benchmark.py --files 10000
+```
+
+Gera um repositório sintético, mede `code:skeleton`, `db:links`, `code:brief` e
+`knowledge:verify`, e grava `workspace/runs/benchmarks/bench-*.json`. Em 2.000
+arquivos: skeleton ~3,1 s, links ~0,9 s, brief ~204 ms, verify ~196 ms.
+
 > As notas/fichas (`notes:*`) e o `kb:export` foram removidos (R0); o mapa em
 > `workspace/knowledge/skeleton/` é a fonte de navegação.
 

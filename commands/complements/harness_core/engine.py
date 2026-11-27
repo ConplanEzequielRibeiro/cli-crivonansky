@@ -329,7 +329,10 @@ class HarnessEngine:
                     "status": status,
                     "duration_ms": duration,
                     "approved_by": "none" if status == "denied" else "auto",
+                    "pack": self.pack or "all",
                     "sinks": self.sinks,
+                    "result_chars": len(text),
+                    "truncated": bool(_truncated),
                 }
             )
         except OSError:

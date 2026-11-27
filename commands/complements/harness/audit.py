@@ -6,6 +6,7 @@ import re
 from datetime import datetime
 
 from . import graphdb, manifest
+from commands.complements.harness_core import redact
 from commands.complements.harness_core.runner import run_process
 from commands.complements.harness_core.util import as_bool, legacy_repo, slugify, workspace
 from .tasks.jit import rg_bin
@@ -105,6 +106,12 @@ def _classify(path: str) -> str:
     return "unknown-hit"
 
 
+def _safe(ctx, text) -> str:
+    policy = redact.get_policy(ctx.config)
+    safe, _stats = redact.redact_text(str(text or ""), policy)
+    return safe
+
+
 def _table_facts(ctx, target: str):
     conn = graphdb.connect(ctx)
     try:
@@ -131,6 +138,7 @@ def collect(ctx, target: str, matchers: list[str]) -> tuple[list[dict], list[str
     buckets = {name: [] for name in CLASSES}
     for hit in hits:
         bucket = _classify(hit["path"])
+        hit["text"] = _safe(ctx, hit.get("text"))
         buckets[bucket].append(hit)
 
     if table_exists:
@@ -143,7 +151,7 @@ def collect(ctx, target: str, matchers: list[str]) -> tuple[list[dict], list[str
         buckets["embedded-sql"].append({
             "path": op["file_path"],
             "line": int(op["line"] or 0),
-            "text": f"{op.get('op')} ({op.get('access')}) {op.get('sql') or ''}".strip(),
+            "text": _safe(ctx, f"{op.get('op')} ({op.get('access')}) {op.get('sql') or ''}".strip()),
         })
     for inc in includes:
         target_path = str(inc.get("target_path") or "")
