@@ -21,10 +21,6 @@ def _context(tmp_path):
     )
     (repo / "app.js").write_text("function carregar() {}\n", encoding="utf-8")
 
-    notes = tmp_path / "ws" / "knowledge" / "notes"
-    notes.mkdir(parents=True)
-    (notes / "clientes.md").write_text("# Clientes\n\nsalvar_cliente grava tb_clientes.\n", encoding="utf-8")
-
     return TaskContext(
         config={"legacy": {"repo_path": str(repo)}},
         workspace=str(tmp_path / "ws"),

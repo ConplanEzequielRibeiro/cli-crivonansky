@@ -29,7 +29,6 @@ from ..util import (
     ensure_allowed,
     legacy_repo,
     looks_like_path,
-    notes_path,
     read_text,
     source_encoding,
     workspace,
@@ -170,14 +169,8 @@ def _display_path(path: str, roots: list[str]) -> str:
 
 
 def _search_root(ctx, scope: str) -> list[str]:
-    roots: list[str] = []
-    if scope in ("notes", "all"):
-        notes = notes_path(ctx)
-        if os.path.isdir(notes):
-            roots.append(notes)
-    if scope in ("repo", "all"):
-        roots.append(legacy_repo(ctx))
-    return roots
+    # ``scope=notes/all`` foi removido na R0.4: busca só no repositório legado.
+    return [legacy_repo(ctx)]
 
 
 # ---------------------------------------------------------------------------
@@ -192,20 +185,24 @@ def handle_search(ctx, params):
         return _unavailable(ctx)
 
     scope = str(params.get("scope") or "repo").lower()
-    if scope not in ("repo", "notes", "all"):
-        return TaskResult(False, "scope inválido (use repo, notes ou all)", exit_code=2)
+    if scope != "repo":
+        return TaskResult(
+            False,
+            "scope 'notes'/'all' removido na R0.4; use apenas 'repo'",
+            exit_code=2,
+        )
 
     roots = _search_root(ctx, scope)
     if not roots:
         return TaskResult(
             False,
-            f"nada para buscar (escopo {scope}): repositório ou notas inexistentes",
+            "nada para buscar: repositório inexistente",
             exit_code=2,
         )
 
     path = params.get("path")
     if path:
-        base = roots[0] if scope == "notes" else legacy_repo(ctx)
+        base = legacy_repo(ctx)
         try:
             resolved = ensure_allowed(ctx, os.path.join(base, str(path)))
         except PermissionError as exc:
