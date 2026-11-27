@@ -90,6 +90,17 @@ def _add_tools_info(info: dict, config_path_arg: str | None = None) -> None:
         info["tools"] = f"(falha ao ler {path}: {exc})"
         return
 
+    try:
+        from commands.complements.harness_core import packs
+
+        info["packs"] = ", ".join(packs.KNOWN_PACKS)
+        info["packs_enabled"] = ", ".join(
+            f"{name}={'on' if packs.is_enabled(config, name) else 'off'}"
+            for name in packs.KNOWN_PACKS
+        )
+    except Exception:  # noqa: BLE001 - informativo
+        pass
+
     for label, keys in (
         ("python", ("python",)),
         ("rg", ("rg",)),
@@ -280,6 +291,10 @@ def install(
         details = getattr(result, "combined", "")
 
     if check_only:
+        if ok:
+            from commands.complements.harness_core import packs
+
+            details = (details + "\npacks: " + ", ".join(packs.KNOWN_PACKS)).strip()
         progress.finish("verificação concluída" if ok else "falha na verificação")
         summary = "dependências OK (check-only)" if ok else "falha na verificação das dependências"
     else:

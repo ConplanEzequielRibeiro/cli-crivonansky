@@ -73,6 +73,19 @@ def pack_command(pack: str) -> str | None:
     return str(manifests()[pack].COMMAND)
 
 
+def config_key(pack: str) -> str:
+    """Chave curta em ``plugins.*`` (harness_exec -> exec)."""
+    return pack[len("harness_"):] if pack.startswith("harness_") else pack
+
+
+def is_enabled(config: dict, pack: str) -> bool:
+    """Pack habilitado? ``plugins.<chave>.enabled`` (padrão: true)."""
+    if pack in ("harness", CORE):
+        return True
+    node = (config.get("plugins") or {}).get(config_key(pack)) or {}
+    return node.get("enabled", True) is not False
+
+
 def load_tasks() -> None:
     """Carrega os handlers de todos os packs conhecidos (cada um é lazy)."""
     for name in KNOWN_PACKS:

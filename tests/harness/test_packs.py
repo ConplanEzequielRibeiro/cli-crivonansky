@@ -188,3 +188,9 @@ def test_contract_hash_is_stable():
         ensure_ascii=False,
     )
     assert hashlib.sha256(payload.encode("utf-8")).hexdigest() == CONTRACT_SHA256
+
+
+def test_plugin_enabled_default_and_disabled():
+    assert packs.is_enabled({}, "harness_exec")
+    assert packs.is_enabled({"plugins": {"exec": {"enabled": True}}}, "harness_exec")
+    assert not packs.is_enabled({"plugins": {"exec": {"enabled": False}}}, "harness_exec")

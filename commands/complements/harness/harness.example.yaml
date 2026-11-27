@@ -4,6 +4,15 @@ harness_version: 1
 # ao gerar workspace/harness.yaml.
 workspace: "{{PLUGIN_ROOT}}/workspace"
 
+# Packs de capacidade (o mapeamento é sempre habilitado).
+plugins:
+  exec: {enabled: true}
+  patch: {enabled: true}
+  validate: {enabled: true}
+  state: {enabled: true}
+  watch: {enabled: true}
+  clean: {enabled: true}
+
 legacy:
   # Perfil de stack: php-mysql (padrão), java-oracle, dotnet-sqlserver,
   # ruby-postgres, node-postgres ou custom (com overrides abaixo).

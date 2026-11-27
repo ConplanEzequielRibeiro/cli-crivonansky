@@ -161,6 +161,22 @@ def execute(pack: str, argv: list[str]) -> tuple[bool, dict]:
         return False, {"error": "subcomando ausente"}
 
     sub, rest = args[0], args[1:]
+
+    if pack not in ("harness", "core"):
+        from .config import load_config
+
+        try:
+            config = load_config(config_path)
+        except Exception:  # noqa: BLE001 - instalação incompleta é tratada pelo subcomando
+            config = None
+        if config is not None and not packs.is_enabled(config, pack):
+            command = _manifest(pack).COMMAND
+            print(
+                f"[{command}] desabilitado em harness.yaml "
+                f"(plugins.{packs.config_key(pack)}.enabled=false)"
+            )
+            return False, {"error": "plugin desabilitado"}
+
     shortcuts = getattr(_manifest(pack), "SHORTCUTS", {}) or {}
     if sub in shortcuts:
         sub, rest = "run", [shortcuts[sub], *rest]

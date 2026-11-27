@@ -1,5 +1,7 @@
 """Contrato dos comandos por pack e do CLI comum (D3.10)."""
 
+import yaml
+
 from commands.complements.harness_core import cli
 from commands.harness_clean import HarnessCleanCommand
 from commands.harness_exec import HarnessExecCommand
@@ -49,3 +51,19 @@ def test_cli_shortcut_maps_to_task():
 
     assert ok is True
     assert data["status"] == "success"
+
+
+def test_cli_respects_plugins_enabled_false(tmp_path):
+    (tmp_path / "repo").mkdir()
+    config = {
+        "workspace": str(tmp_path / "ws"),
+        "legacy": {"repo_path": str(tmp_path / "repo")},
+        "plugins": {"exec": {"enabled": False}},
+    }
+    path = tmp_path / "harness.yaml"
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+
+    ok, data = cli.execute("harness_exec", ["tasks", "--config", str(path)])
+
+    assert ok is False
+    assert data["error"] == "plugin desabilitado"
