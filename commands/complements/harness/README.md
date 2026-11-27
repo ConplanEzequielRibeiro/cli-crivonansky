@@ -464,9 +464,15 @@ subprocesso. As ferramentas são:
 | Ferramenta | Equivale a |
 |---|---|
 | `crivonansky_tasks` | `harness tasks` (nome, intent e parâmetros) |
-| `crivonansky_run` | `harness run <task> --param k=v` |
+| `crivonansky_run` | `harness run <task> --param k=v` (roteia pelo dono) |
 | `crivonansky_exec` | `harness exec --stdin` (política do harness) |
 | `crivonansky_ask` | `harness ask "<pergunta>" --context ... --budget ...` |
+| `crivonansky_plugins` | `harness config` (packs e enabled) |
+| `crivonansky_brief` | `harness run code:brief --json` |
+| `crivonansky_verify` | `harness run knowledge:verify --json` |
+| `crivonansky_impact` | brief de tabela/símbolo/path |
+| `crivonansky_audit_removal` | `harness run audit:removal --json` (escrita) |
+| `crivonansky_audit_verify` | `harness run audit:verify --json` |
 
 Configuração mínima (`.opencode/opencode.jsonc` na raiz do projeto OpenCode):
 

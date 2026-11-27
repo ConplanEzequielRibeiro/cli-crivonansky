@@ -297,6 +297,59 @@ def tool_plugins(_arguments: dict) -> tuple[str, bool]:
     return _invoke(["config"])
 
 
+def _params_argv(arguments: dict, keys) -> list[str]:
+    argv = []
+    for key in keys:
+        value = arguments.get(key)
+        if value is not None:
+            argv += ["--param", f"{key}={_stringify(value)}"]
+    return argv
+
+
+def tool_brief(arguments: dict) -> tuple[str, bool]:
+    if not any(arguments.get(key) for key in ("path", "table", "symbol", "dir", "changed")):
+        return "informe path, table, symbol, dir ou changed.", True
+    argv = ["run", "code:brief", "--json"] + _params_argv(
+        arguments, ("path", "table", "symbol", "dir", "changed", "mode", "budget", "max_paths", "max_tables")
+    )
+    return _invoke(argv)
+
+
+def tool_verify(arguments: dict) -> tuple[str, bool]:
+    argv = ["run", "knowledge:verify", "--json"] + _params_argv(
+        arguments, ("deep", "fail_on_dirty")
+    )
+    return _invoke(argv)
+
+
+def tool_impact(arguments: dict) -> tuple[str, bool]:
+    return tool_brief(arguments)
+
+
+def tool_audit_removal(arguments: dict) -> tuple[str, bool]:
+    target = str(arguments.get("target") or "").strip()
+    if not target:
+        return "parâmetro obrigatório: target.", True
+    if not ALLOW_WRITE:
+        return (
+            "audit:removal grava um ledger e está bloqueada neste servidor. "
+            "Peça ao usuário para habilitar `CRIVONANSKY_ALLOW_WRITE=1`.",
+            True,
+        )
+    argv = ["run", "audit:removal", "--param", f"target={target}", "--yes", "--json"]
+    matcher = arguments.get("matcher")
+    if matcher:
+        argv += ["--param", f"matcher={_stringify(matcher)}"]
+    return _invoke(argv)
+
+
+def tool_audit_verify(arguments: dict) -> tuple[str, bool]:
+    argv = ["run", "audit:verify", "--json"] + _params_argv(
+        arguments, ("ledger", "fail_on_leftovers")
+    )
+    return _invoke(argv)
+
+
 def tool_ask(arguments: dict) -> tuple[str, bool]:
     question = str(arguments.get("question") or "").strip()
     if not question:
@@ -387,6 +440,75 @@ TOOLS = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "brief",
+        "description": "Pacote limitado de contexto (path/table/symbol/dir) com impacto, budget e omissões.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "table": {"type": "string"},
+                "symbol": {"type": "string"},
+                "dir": {"type": "string"},
+                "changed": {"type": "boolean"},
+                "mode": {"type": "string", "enum": ["planning", "implementation", "review"]},
+                "budget": {"type": "integer"},
+                "max_paths": {"type": "integer"},
+                "max_tables": {"type": "integer"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "verify",
+        "description": "Verifica o frescor do mapa/vínculos (knowledge:verify).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "deep": {"type": "boolean"},
+                "fail_on_dirty": {"type": "boolean"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "impact",
+        "description": "Atalho para o impacto de uma tabela, símbolo ou path (brief).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "table": {"type": "string"},
+                "symbol": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "audit_removal",
+        "description": "Cria um ledger de completude para remoção/migração (escrita).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target": {"type": "string"},
+                "matcher": {"type": "string"},
+            },
+            "required": ["target"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "audit_verify",
+        "description": "Reexecuta um ledger e falha fechado se sobrarem referências ativas.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "ledger": {"type": "string"},
+                "fail_on_leftovers": {"type": "boolean"},
+            },
+            "additionalProperties": False,
+        },
+    },
 ]
 
 HANDLERS = {
@@ -395,6 +517,11 @@ HANDLERS = {
     "exec": tool_exec,
     "ask": tool_ask,
     "plugins": tool_plugins,
+    "brief": tool_brief,
+    "verify": tool_verify,
+    "impact": tool_impact,
+    "audit_removal": tool_audit_removal,
+    "audit_verify": tool_audit_verify,
 }
 
 
