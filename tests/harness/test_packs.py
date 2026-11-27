@@ -9,6 +9,11 @@ from collections import Counter
 
 from commands.complements.harness.catalog import all_tasks, load_tasks
 
+# Snapshot limpo no import do módulo: os testes de engine registram tarefas
+# ``test:*`` dentro das funções, então não contaminam este retrato.
+load_tasks()
+_CATALOG = {spec.name: spec for spec in all_tasks()}
+
 # nome -> (intent, required, optional), exatamente como registrado hoje.
 EXPECTED = {
     "clean:artifacts": ("write", [], ["scope", "dry_run"]),
@@ -113,8 +118,7 @@ PACKS = {
 
 
 def _catalog():
-    load_tasks()
-    return {spec.name: spec for spec in all_tasks()}
+    return _CATALOG
 
 
 def test_inventory_count():
