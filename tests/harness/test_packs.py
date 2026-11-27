@@ -2,7 +2,7 @@
 
 Este teste é o contrato do desmembramento: nenhuma tarefa pode sumir, mudar de
 assinatura ou de dono sem uma atualização explícita. A R0.2 removeu as três tarefas
-`notes:*` (34 restantes); a R0.3 remove `kb:export` (33) e a R0.12 finaliza o mapa.
+`notes:*` e a R0.3 removeu `kb:export`, deixando 33 tarefas.
 """
 
 from collections import Counter
@@ -37,7 +37,6 @@ EXPECTED = {
     "env:check": ("read", [], []),
     "file:read": ("read", ["path"], ["start", "end"]),
     "git:run": ("read", ["args"], ["repo"]),
-    "kb:export": ("write", [], ["out", "max_chars"]),
     "lint": ("read", [], ["filter"]),
     "logs:tail": ("read", ["container"], ["lines"]),
     "patch:apply": ("write", ["diff"], ["verify", "branch", "allow_dirty", "strip"]),
@@ -80,7 +79,6 @@ OWNER = {
     "env:check": "core",
     "file:read": "harness",
     "git:run": "harness_exec",
-    "kb:export": "harness",
     "lint": "harness_validate",
     "logs:tail": "harness_exec",
     "patch:apply": "harness_patch",
@@ -116,7 +114,7 @@ def _catalog():
 
 
 def test_inventory_count():
-    assert len(_catalog()) == 34
+    assert len(_catalog()) == 33
 
 
 def test_inventory_matches_frozen_names():
@@ -141,7 +139,7 @@ def test_owner_map_covers_every_task():
 
 def test_target_pack_distribution():
     assert Counter(OWNER.values()) == {
-        "harness": 16,
+        "harness": 15,
         "harness_exec": 5,
         "harness_patch": 1,
         "harness_validate": 3,

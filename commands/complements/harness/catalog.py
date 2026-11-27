@@ -32,7 +32,6 @@ def load_tasks() -> None:
         file,
         git,
         jit,
-        kb,
         links,
         patch,
         pipelines,
