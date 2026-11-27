@@ -1,8 +1,8 @@
 """Política por origem: blocos do LLM não executam shell/py/docker (T03)."""
 
-from commands.complements.harness.contract import CommandBlock
-from commands.complements.harness.policy import check_policy, llm_task_denied
-from commands.complements.harness.task_types import TaskSpec
+from commands.complements.harness_core.contract import CommandBlock
+from commands.complements.harness_core.policy import check_policy, llm_task_denied
+from commands.complements.harness_core.task_types import TaskSpec
 
 
 def _spec(intent="read"):

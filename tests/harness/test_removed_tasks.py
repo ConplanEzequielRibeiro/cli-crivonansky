@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from commands.complements.harness.catalog import get_task, load_tasks
-from commands.complements.harness.task_types import TaskContext
+from commands.complements.harness_core.catalog import get_task, load_tasks
+from commands.complements.harness_core.task_types import TaskContext
 from commands.complements.harness.tasks import jit
 
 ROOT = Path(__file__).resolve().parents[2]

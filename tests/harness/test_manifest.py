@@ -4,7 +4,7 @@ import os
 import subprocess
 
 from commands.complements.harness import manifest
-from commands.complements.harness.task_types import TaskContext
+from commands.complements.harness_core.task_types import TaskContext
 from commands.complements.harness.tasks import knowledge, links, skeleton
 
 

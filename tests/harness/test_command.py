@@ -5,7 +5,7 @@ import sys
 from types import SimpleNamespace
 
 from commands.harness import HarnessCommand
-from commands.complements.harness.task_types import TaskResult
+from commands.complements.harness_core.task_types import TaskResult
 
 
 def test_help_lists_lifecycle_and_contract_subcommands():
@@ -102,7 +102,7 @@ def test_single_no_clipboard_uses_stdout_sink(monkeypatch):
             return "ok", "success"
 
     monkeypatch.setattr(
-        "commands.complements.harness.engine.HarnessEngine", FakeEngine
+        "commands.complements.harness_core.engine.HarnessEngine", FakeEngine
     )
 
     ok, _data = HarnessCommand()._single(None, "code:skeleton", {}, no_clipboard=True)
@@ -122,7 +122,7 @@ def test_single_keeps_config_sinks_by_default(monkeypatch):
             return "ok", "success"
 
     monkeypatch.setattr(
-        "commands.complements.harness.engine.HarnessEngine", FakeEngine
+        "commands.complements.harness_core.engine.HarnessEngine", FakeEngine
     )
 
     HarnessCommand()._single(None, "code:skeleton", {})
@@ -137,7 +137,7 @@ def test_ask_no_clipboard_does_not_copy(monkeypatch, tmp_path):
             self.workspace = str(tmp_path)
 
     monkeypatch.setattr(
-        "commands.complements.harness.engine.HarnessEngine", FakeEngine
+        "commands.complements.harness_core.engine.HarnessEngine", FakeEngine
     )
 
     class Boom:

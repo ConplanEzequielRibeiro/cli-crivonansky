@@ -1,7 +1,7 @@
 import json
 
 from commands.complements.harness.tasks import links
-from commands.complements.harness.task_types import TaskContext
+from commands.complements.harness_core.task_types import TaskContext
 
 
 def _context(tmp_path, extra_files=None, skeleton=None):

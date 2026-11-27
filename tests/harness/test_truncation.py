@@ -1,6 +1,6 @@
 """Marcadores de truncamento explícitos, em fronteira de linha (T07)."""
 
-from commands.complements.harness import formatter
+from commands.complements.harness_core import formatter
 
 
 def test_marker_shape_and_hint():

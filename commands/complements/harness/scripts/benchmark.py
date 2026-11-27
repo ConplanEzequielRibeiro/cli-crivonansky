@@ -17,7 +17,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from commands.complements.harness import briefing, manifest  # noqa: E402
-from commands.complements.harness.task_types import TaskContext  # noqa: E402
+from commands.complements.harness_core.task_types import TaskContext  # noqa: E402
 from commands.complements.harness.tasks import links, skeleton  # noqa: E402
 
 

@@ -24,7 +24,7 @@ from sqlglot import exp
 from commands.complements.harness_core.catalog import register
 from ..filters import config_excludes, iter_files
 from ..profiles import resolve_profile
-from ..progress import for_context, format_duration
+from commands.complements.harness_core.progress import for_context, format_duration
 from commands.complements.harness_core.task_types import TaskResult, TaskSpec
 from commands.complements.harness_core.util import as_int, legacy_repo, read_text, workspace, write_json, write_text
 

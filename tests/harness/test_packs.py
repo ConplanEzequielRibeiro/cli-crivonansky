@@ -11,8 +11,8 @@ from collections import Counter
 
 import pytest
 
-from commands.complements.harness import packs
-from commands.complements.harness.catalog import all_tasks, load_tasks
+from commands.complements.harness_core import packs
+from commands.complements.harness_core.catalog import all_tasks, load_tasks
 
 # Snapshot limpo no import do módulo: os testes de engine registram tarefas
 # ``test:*`` dentro das funções, então não contaminam este retrato.

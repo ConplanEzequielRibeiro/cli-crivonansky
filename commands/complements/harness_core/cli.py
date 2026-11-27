@@ -28,7 +28,7 @@ def _forward_enabled(config_path: str | None) -> bool:
         config = load_config(config_path)
     except Exception:  # noqa: BLE001 - sem config, mantém o comportamento antigo
         return True
-    return (config.get("compat") or {}).get("forward_legacy", True) is not False
+    return (config.get("compat") or {}).get("forward_legacy", False) is not False
 
 
 def _engine(pack, config_path=None, yes=False, dry_run=False, no_clipboard=False):

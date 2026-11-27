@@ -113,10 +113,10 @@ def _catalog() -> dict[str, dict] | None:
     try:
         if ROOT not in sys.path:
             sys.path.insert(0, ROOT)
-        from commands.complements.harness import bootstrap
+        from commands.complements.harness_core import bootstrap
 
         bootstrap.ensure_deps()
-        from commands.complements.harness.catalog import all_tasks, load_tasks
+        from commands.complements.harness_core.catalog import all_tasks, load_tasks
 
         load_tasks()
         _TASKS = {

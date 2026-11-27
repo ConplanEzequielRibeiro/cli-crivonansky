@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from commands.complements.harness.runner import run_process
+from commands.complements.harness_core.runner import run_process
 
 
 def test_captures_stdout_stderr_and_exit_code():

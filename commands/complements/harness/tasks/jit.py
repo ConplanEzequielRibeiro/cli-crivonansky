@@ -16,7 +16,8 @@ import os
 import re
 import shutil
 
-from .. import astsym, redact
+from .. import astsym
+from commands.complements.harness_core import redact
 from commands.complements.harness_core.catalog import register
 from commands.complements.harness_core.config import get_tool_path
 from ..filters import SKIP_DIRS

@@ -1,6 +1,6 @@
 """Redação de dados pessoais, segredos e colunas (T01/T02)."""
 
-from commands.complements.harness import redact
+from commands.complements.harness_core import redact
 
 
 def _policy(**kw):

@@ -2,7 +2,7 @@
 
 import os
 
-from commands.complements.harness import progress
+from commands.complements.harness_core import progress
 
 
 def _reset(monkeypatch):

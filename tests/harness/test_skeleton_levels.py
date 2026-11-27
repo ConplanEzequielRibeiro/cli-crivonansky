@@ -1,7 +1,7 @@
 """code:skeleton em níveis: índice, MAP.md, fatias por diretório e exclude (T08–T11)."""
 
 from commands.complements.harness import filters
-from commands.complements.harness.task_types import TaskContext
+from commands.complements.harness_core.task_types import TaskContext
 from commands.complements.harness.tasks import skeleton
 
 

@@ -5,10 +5,10 @@ import subprocess
 import pytest
 import yaml
 
-from commands.complements.harness.catalog import load_tasks
-from commands.complements.harness.engine import HarnessEngine
-from commands.complements.harness.tasks import patch as patch_task
-from commands.complements.harness.task_types import TaskContext
+from commands.complements.harness_core.catalog import load_tasks
+from commands.complements.harness_core.engine import HarnessEngine
+from commands.complements.harness_patch.tasks import patch as patch_task
+from commands.complements.harness_core.task_types import TaskContext
 
 SOURCE = (
     "<?php\r\n"

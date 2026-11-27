@@ -1,6 +1,6 @@
-from commands.complements.harness.contract import CommandBlock
-from commands.complements.harness.policy import check_policy
-from commands.complements.harness.task_types import TaskSpec
+from commands.complements.harness_core.contract import CommandBlock
+from commands.complements.harness_core.policy import check_policy
+from commands.complements.harness_core.task_types import TaskSpec
 
 
 def _spec(intent="read"):
@@ -55,7 +55,7 @@ def test_block_cannot_downgrade_intent():
 
 
 def test_docker_exec_read_only_intent():
-    from commands.complements.harness.tasks.docker import intent_for
+    from commands.complements.harness_exec.tasks.docker import intent_for
 
     assert intent_for({"command": "php -v"}) == "read"
     assert intent_for({"command": "ls /var/www/html"}) == "read"

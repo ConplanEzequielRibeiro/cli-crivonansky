@@ -121,7 +121,7 @@ class HarnessCommand(Command):
             self._ensure_runtime()
 
             if sub == "tasks":
-                from .complements.harness.catalog import all_tasks
+                from .complements.harness_core.catalog import all_tasks
 
                 specs = all_tasks()
                 for spec in specs:
@@ -151,14 +151,14 @@ class HarnessCommand(Command):
 
     # ------------------------------------------------------------------
     def _ensure_runtime(self):
-        from .complements.harness.bootstrap import ensure_deps
+        from .complements.harness_core.bootstrap import ensure_deps
 
         if not ensure_deps():
             raise RuntimeError(
                 "dependências do plugin não instaladas; rode '/harness install'"
             )
 
-        from .complements.harness.catalog import load_tasks
+        from .complements.harness_core.catalog import load_tasks
 
         load_tasks()
 
@@ -183,7 +183,7 @@ class HarnessCommand(Command):
         }
 
     def _exec(self, config_path, args):
-        from .complements.harness.engine import HarnessEngine
+        from .complements.harness_core.engine import HarnessEngine
 
         yes = "--yes" in args
         dry_run = "--dry-run" in args
@@ -245,7 +245,7 @@ class HarnessCommand(Command):
     ):
         import yaml
 
-        from .complements.harness.engine import HarnessEngine
+        from .complements.harness_core.engine import HarnessEngine
 
         engine = HarnessEngine(
             config_path=config_path,
@@ -260,9 +260,9 @@ class HarnessCommand(Command):
         return status == "success", {"status": status}
 
     def _ask(self, config_path, args):
-        from .complements.harness.catalog import get_task
-        from .complements.harness.engine import HarnessEngine
-        from .complements.harness.task_types import TaskContext
+        from .complements.harness_core.catalog import get_task
+        from .complements.harness_core.engine import HarnessEngine
+        from .complements.harness_core.task_types import TaskContext
 
         from .complements.harness import asking
 
@@ -371,7 +371,7 @@ class HarnessCommand(Command):
         except Exception:  # noqa: BLE001 - aviso é complementar
             pass
 
-        from .complements.harness import redact
+        from .complements.harness_core import redact
 
         policy = redact.get_policy(engine.config)
         if redact.applies(policy, "ask"):
@@ -426,7 +426,7 @@ class HarnessCommand(Command):
 
         text = "\n\n".join(blocks)
         if len(text) > max_chars:
-            from .complements.harness.formatter import cut_head
+            from .complements.harness_core.formatter import cut_head
 
             text, _omitted = cut_head(
                 text,
@@ -448,7 +448,7 @@ class HarnessCommand(Command):
         except OSError as exc:  # noqa: BLE001
             return f"(falha ao ler o mapa: {exc})"
         if len(text) > max_chars:
-            from .complements.harness.formatter import cut_head
+            from .complements.harness_core.formatter import cut_head
 
             text, _omitted = cut_head(
                 text,
@@ -470,7 +470,7 @@ class HarnessCommand(Command):
         except OSError as exc:  # noqa: BLE001
             return f"(falha ao ler o esqueleto: {exc})"
         if len(text) > max_chars:
-            from .complements.harness.formatter import cut_head
+            from .complements.harness_core.formatter import cut_head
 
             text, _omitted = cut_head(
                 text,
@@ -501,7 +501,7 @@ class HarnessCommand(Command):
             return "(nenhum arquivo no manifesto)"
         text = "\n".join(lines)
         if len(text) > max_chars:
-            from .complements.harness.formatter import cut_head
+            from .complements.harness_core.formatter import cut_head
 
             text, _omitted = cut_head(
                 text, max_chars, hint="Use `rag:search` para localizar um manual."
@@ -548,7 +548,7 @@ class HarnessCommand(Command):
 
     def _hooks(self, config_path, args):
         from .complements.harness import hooks
-        from .complements.harness.engine import HarnessEngine
+        from .complements.harness_core.engine import HarnessEngine
 
         action = args[0] if args else "status"
         engine = HarnessEngine(config_path=config_path, interactive=False)
@@ -574,7 +574,7 @@ class HarnessCommand(Command):
         return False, {"error": "acao desconhecida"}
 
     def _runs(self, config_path, args):
-        from .complements.harness.engine import HarnessEngine
+        from .complements.harness_core.engine import HarnessEngine
 
         count = 10
         if "--last" in args:

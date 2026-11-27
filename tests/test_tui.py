@@ -329,7 +329,7 @@ class ConfirmExecutor:
         self.last_result = (True, None)
 
     def execute(self, command):
-        from commands.complements.harness.engine import get_confirm_handler
+        from commands.complements.harness_core.engine import get_confirm_handler
 
         handler = get_confirm_handler()
         if handler is None:

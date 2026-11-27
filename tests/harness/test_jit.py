@@ -2,9 +2,9 @@
 
 import json
 
-from commands.complements.harness.runner import ProcessResult
+from commands.complements.harness_core.runner import ProcessResult
 from commands.complements.harness.tasks import jit
-from commands.complements.harness.task_types import TaskContext
+from commands.complements.harness_core.task_types import TaskContext
 
 
 def _context(tmp_path):

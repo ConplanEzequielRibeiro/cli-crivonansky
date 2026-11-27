@@ -35,7 +35,7 @@ ARTIFACT_RE = re.compile(r"\.(?:min|bundle|pack)\.js$", re.I)
 
 def config_excludes(config: dict | None, extra=None) -> list[str]:
     """Padrões de exclusão: ``legacy.exclude`` da config + ``extra`` (parâmetro)."""
-    from .util import as_list
+    from commands.complements.harness_core.util import as_list
 
     legacy = (config or {}).get("legacy") or {}
     patterns = [str(item) for item in as_list(legacy.get("exclude"))]

@@ -13,9 +13,10 @@ plugins:
   watch: {enabled: true}
   clean: {enabled: true}
 
-# Uma release de compatibilidade: `/harness run <task>` encaminha para o pack dono.
+# Compatibilidade: o `/harness` não encaminha mais tarefas de outros packs.
+# Ligue temporariamente para rollback.
 compat:
-  forward_legacy: true
+  forward_legacy: false
 
 legacy:
   # Perfil de stack: php-mysql (padrão), java-oracle, dotnet-sqlserver,

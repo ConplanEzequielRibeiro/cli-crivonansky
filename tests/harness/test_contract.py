@@ -1,6 +1,6 @@
 import pytest
 
-from commands.complements.harness.contract import (
+from commands.complements.harness_core.contract import (
     ContractError,
     extract_blocks,
     parse_block,

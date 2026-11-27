@@ -4,9 +4,9 @@ import subprocess
 
 import pytest
 
-from commands.complements.harness import patching
-from commands.complements.harness.task_types import TaskContext
-from commands.complements.harness.tasks import patch as patch_task
+from commands.complements.harness_patch import patching
+from commands.complements.harness_core.task_types import TaskContext
+from commands.complements.harness_patch.tasks import patch as patch_task
 
 ORIGINAL = "<?php\r\n// Ação\r\n$a = 1;\r\necho $a;\r\n"
 DIFF = """diff --git a/cadastro/x.php b/cadastro/x.php

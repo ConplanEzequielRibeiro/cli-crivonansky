@@ -4,9 +4,9 @@ import json
 import os
 
 from .. import graphdb
-from ..catalog import register
-from ..task_types import TaskResult, TaskSpec
-from ..util import as_bool, workspace
+from commands.complements.harness_core.catalog import register
+from commands.complements.harness_core.task_types import TaskResult, TaskSpec
+from commands.complements.harness_core.util import as_bool, workspace
 
 TABLES = ("files", "symbols", "imports", "tables", "table_ops", "fk_inferred", "includes")
 

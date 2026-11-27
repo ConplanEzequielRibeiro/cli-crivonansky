@@ -2,10 +2,10 @@
 
 import pytest
 
-from commands.complements.harness.runner import ProcessResult
+from commands.complements.harness_core.runner import ProcessResult
 from commands.complements.harness.tasks import jit, links
-from commands.complements.harness.task_types import TaskContext
-from commands.complements.harness.util import read_text
+from commands.complements.harness_core.task_types import TaskContext
+from commands.complements.harness_core.util import read_text
 
 
 def _ctx(tmp_path, legacy=None):

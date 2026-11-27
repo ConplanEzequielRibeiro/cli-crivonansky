@@ -4,9 +4,9 @@ import json
 
 import pytest
 
-from commands.complements.harness.runner import ProcessResult
+from commands.complements.harness_core.runner import ProcessResult
 from commands.complements.harness.tasks import db
-from commands.complements.harness.task_types import TaskContext
+from commands.complements.harness_core.task_types import TaskContext
 
 
 def _ctx(tmp_path, legacy):
@@ -190,7 +190,7 @@ def test_query_uses_profile_dialect(tmp_path, monkeypatch):
 
 
 def test_read_text_strips_utf8_bom(tmp_path):
-    from commands.complements.harness.util import read_text
+    from commands.complements.harness_core.util import read_text
 
     dump = tmp_path / "dump.sql"
     dump.write_bytes(b"\xef\xbb\xbfCREATE TABLE x (id int);\n")

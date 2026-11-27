@@ -4,8 +4,8 @@ import json
 import os
 import time
 
-from commands.complements.harness.tasks import clean
-from commands.complements.harness.task_types import TaskContext
+from commands.complements.harness_clean.tasks import clean
+from commands.complements.harness_core.task_types import TaskContext
 
 
 def _ctx(tmp_path):

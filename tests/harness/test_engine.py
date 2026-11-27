@@ -1,8 +1,8 @@
 import yaml
 
-from commands.complements.harness.catalog import load_tasks, register
-from commands.complements.harness.engine import HarnessEngine
-from commands.complements.harness.task_types import TaskResult, TaskSpec
+from commands.complements.harness_core.catalog import load_tasks, register
+from commands.complements.harness_core.engine import HarnessEngine
+from commands.complements.harness_core.task_types import TaskResult, TaskSpec
 
 
 def _config(tmp_path):

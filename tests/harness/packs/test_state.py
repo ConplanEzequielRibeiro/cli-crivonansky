@@ -2,9 +2,9 @@
 
 import pytest
 
-from commands.complements.harness import state as st
-from commands.complements.harness.task_types import TaskContext
-from commands.complements.harness.tasks import state as state_task
+from commands.complements.harness_core import state_contract as st
+from commands.complements.harness_core.task_types import TaskContext
+from commands.complements.harness_state.tasks import state as state_task
 
 BLOCK = """Aqui vai o estado:
 

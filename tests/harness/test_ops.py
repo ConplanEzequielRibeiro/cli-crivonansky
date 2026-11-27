@@ -3,8 +3,8 @@
 from pathlib import Path
 
 from commands.complements.harness import config_template, ops
-from commands.complements.harness.runner import ProcessResult
-from commands.complements.harness.task_types import TaskResult
+from commands.complements.harness_core.runner import ProcessResult
+from commands.complements.harness_core.task_types import TaskResult
 
 
 def test_config_template_renders_plugin_root(tmp_path):

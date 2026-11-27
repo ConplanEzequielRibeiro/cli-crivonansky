@@ -3,9 +3,9 @@
 import os
 import time
 
-from commands.complements.harness import watch
-from commands.complements.harness.task_types import TaskContext
-from commands.complements.harness.tasks import watch as watch_task
+from commands.complements.harness_watch import watch
+from commands.complements.harness_core.task_types import TaskContext
+from commands.complements.harness_watch.tasks import watch as watch_task
 
 BLOCK = "```crivonansky\nharness: 1\ntask: prompt\nparams: {}\n```"
 RESULT = "```crivonansky-result\nharness: 1\nid: c-1\nstatus: success\n```"
@@ -123,7 +123,7 @@ def test_watch_stop_flag_ends_loop(tmp_path):
 
 
 def test_llm_cannot_start_watchers():
-    from commands.complements.harness.policy import llm_task_denied
+    from commands.complements.harness_core.policy import llm_task_denied
 
     assert llm_task_denied({}, "watch:clip")
     assert llm_task_denied({}, "watch:downloads")

@@ -1,4 +1,4 @@
-from commands.complements.harness.formatter import (
+from commands.complements.harness_core.formatter import (
     collapse_repeats,
     format_result,
     mask_secrets,

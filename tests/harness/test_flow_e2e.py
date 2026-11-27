@@ -2,8 +2,8 @@
 
 import yaml
 
-from commands.complements.harness.catalog import load_tasks
-from commands.complements.harness.engine import HarnessEngine
+from commands.complements.harness_core.catalog import load_tasks
+from commands.complements.harness_core.engine import HarnessEngine
 from commands.harness import HarnessCommand
 from commands.harness_state import HarnessStateCommand
 
