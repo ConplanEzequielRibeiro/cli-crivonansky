@@ -5,6 +5,8 @@ assinatura ou de dono sem uma atualização explícita. A R0.2 removeu as três 
 `notes:*` e a R0.3 removeu `kb:export`, deixando 33 tarefas.
 """
 
+import hashlib
+import json
 from collections import Counter
 
 import pytest
@@ -111,6 +113,10 @@ PACKS = {
     "core",
 }
 
+# Hash de EXPECTED (nome -> [intent, required, optional]). Qualquer mudança de
+# assinatura exige atualizar este valor de forma explícita.
+CONTRACT_SHA256 = "e99a2a00d629efeccbfb22881a0bd61633bcd26da4956c30a06da84994f2bf38"
+
 
 def _catalog():
     return _CATALOG
@@ -173,3 +179,12 @@ def test_owner_of_representative_tasks():
 def test_duplicate_owner_is_rejected():
     with pytest.raises(ValueError, match="tarefa duplicada: x"):
         packs.build_owner([("a", ["x"]), ("b", ["x"])])
+
+
+def test_contract_hash_is_stable():
+    payload = json.dumps(
+        {name: list(signature) for name, signature in EXPECTED.items()},
+        sort_keys=True,
+        ensure_ascii=False,
+    )
+    assert hashlib.sha256(payload.encode("utf-8")).hexdigest() == CONTRACT_SHA256
