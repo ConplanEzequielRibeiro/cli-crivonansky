@@ -21,6 +21,8 @@ _CATALOG = {spec.name: spec for spec in all_tasks()}
 
 # nome -> (intent, required, optional), exatamente como registrado hoje.
 EXPECTED = {
+    "audit:removal": ("write", ["target"], ["kind", "matcher", "write", "json"]),
+    "audit:verify": ("read", [], ["ledger", "fail_on_leftovers", "json"]),
     "clean:artifacts": ("write", [], ["scope", "dry_run"]),
     "clean:runs": ("write", [], ["days", "keep", "dry_run"]),
     "code:brief": (
@@ -73,6 +75,8 @@ EXPECTED = {
 # Dono alvo de cada tarefa no desmembramento. Ainda não existe no código;
 # este mapa é a referência que a fase D0 vai implementar.
 OWNER = {
+    "audit:removal": "harness",
+    "audit:verify": "harness",
     "clean:artifacts": "harness_clean",
     "clean:runs": "harness_clean",
     "code:brief": "harness",
@@ -123,7 +127,7 @@ PACKS = {
 
 # Hash de EXPECTED (nome -> [intent, required, optional]). Qualquer mudança de
 # assinatura exige atualizar este valor de forma explícita.
-CONTRACT_SHA256 = "a5b4ebfe96209d6d644db3537f49fedb974845affa9663216460fdece0a7cd8f"
+CONTRACT_SHA256 = "760e5e571c719b911b88a586d53017330f2ffe8872a8b8c5de91da6bbba1b1b4"
 
 
 def _catalog():
@@ -131,7 +135,7 @@ def _catalog():
 
 
 def test_inventory_count():
-    assert len(_catalog()) == 35
+    assert len(_catalog()) == 37
 
 
 def test_inventory_matches_frozen_names():
@@ -156,7 +160,7 @@ def test_owner_map_covers_every_task():
 
 def test_target_pack_distribution():
     assert Counter(OWNER.values()) == {
-        "harness": 17,
+        "harness": 19,
         "harness_exec": 5,
         "harness_patch": 1,
         "harness_validate": 3,
