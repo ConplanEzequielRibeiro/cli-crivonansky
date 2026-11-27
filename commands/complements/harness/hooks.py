@@ -56,7 +56,12 @@ def _build_script(
 
 def _settings(config: dict) -> tuple[list[str], str, str]:
     hooks_cfg = config.get("hooks") or {}
-    tasks = hooks_cfg.get("tasks") or ["code:skeleton", "notes:stale"]
+    tasks = list(hooks_cfg.get("tasks") or ["code:skeleton"])
+    # R0.7: notas removidas. Configs antigas com `notes:stale` são migradas ao
+    # reinstalar os hooks; se sobrar vazio, mantém o esqueleto.
+    tasks = [task for task in tasks if task != "notes:stale"]
+    if not tasks:
+        tasks = ["code:skeleton"]
     log = hooks_cfg.get("log") or os.path.join(get_workspace(config), "runs", "hooks.log")
     if not os.path.isabs(log):
         log = os.path.join(get_workspace(config), log)
