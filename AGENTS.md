@@ -62,10 +62,9 @@ only the semantic layer (manuals, tickets, db schema and `db:links` output).
 | `commands/complements/harness/astsym.py` | Símbolos (ast-grep + fallback regex/chaves) para o esqueleto e o `db:links` |
 | `commands/complements/harness/redact.py` | Sanitização de saída (LGPD/segredos) aplicada a `exec`, `ask` e `context:pack` |
 | `commands/complements/harness/patching.py` | Aplicação de diff preservando encoding/CRLF/BOM (usado por `patch:apply`) |
-| `commands/complements/harness/notes.py` | Esquema/hash/validação das fichas de módulo (`notes:*`) |
 | `commands/complements/harness/state.py` | Contrato do bloco `crivonansky-state` e prompt de retomada |
 | `commands/complements/harness/watch.py` | Lógica dos monitores de clipboard/downloads (sem loop) |
-| `commands/complements/harness/asking.py` | Montagem do `ask`: notas/mapa e orçamento de tokens |
+| `commands/complements/harness/asking.py` | Montagem do `ask`: mapa e orçamento de tokens |
 | `commands/complements/harness/tasks/` | Task catalog (`code:*`, `db:*`, `rag:*`, `docs:import`, `git:run`, `shell:run`, `docker:exec`, etc.) |
 
 Lifecycle subcommands:
@@ -84,11 +83,9 @@ Contract subcommands:
 ```text
 /harness exec --clip | --file F | --stdin [--yes] [--dry-run]
 /harness run <task> [--param k=v ...] [--key value] [--yes] [--dry-run]
-/harness ask "pergunta" [--context map,notes,db,code,docs,rag,skeleton] [--budget TOKENS]
+/harness ask "pergunta" [--context map,db,code,docs,rag,skeleton] [--budget TOKENS]
 /harness state save --clip | list | load [--last | NOME]
-/harness notes draft <dir> | save --clip | stale
 /harness watch clip [--stop] | watch downloads [--path P] [--stop]
-/harness kb export [--out P] [--max_chars N]
 /harness clean artifacts [--scope ...] | clean runs [--days N] [--keep N]
 /harness prompt | tasks | runs [--last N] | env:check
 /harness hooks install|uninstall|status
@@ -113,7 +110,7 @@ Notes:
   blocks. `patch:apply` preserves encoding/CRLF/BOM and refuses protected branches.
 - `watch:clip`/`watch:downloads` are long-running loops (TUI worker).
 - `clean:artifacts`/`clean:runs` remove regenerable artifacts and old runs; they never
-  touch `knowledge/notes` or `harness.yaml`, and honor `--param dry_run=true`.
+  touch `knowledge/notes` legado, `state/` or `harness.yaml`, and honor `--param dry_run=true`.
 - `commands/harness.py` must remain importable **without** PyYAML/sqlglot so that
   `/harness install` works on a bare host venv. Keep heavy imports inside methods.
 - Do not add harness runtime deps (PyYAML, pyperclip, sqlglot) to the root

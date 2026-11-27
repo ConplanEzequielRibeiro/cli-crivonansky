@@ -291,7 +291,7 @@ def tool_ask(arguments: dict) -> tuple[str, bool]:
 TOOLS = [
     {
         "name": "tasks",
-        "description": "Lista as tarefas do harness (code:*, db:*, notes:*, ...) com intent e parâmetros.",
+        "description": "Lista as tarefas do harness (code:*, db:*, state:*, ...) com intent e parâmetros.",
         "inputSchema": {
             "type": "object",
             "properties": {},
@@ -344,7 +344,7 @@ TOOLS = [
                 "question": {"type": "string"},
                 "context": {
                     "type": "string",
-                    "description": "Lista separada por vírgula: map,notes,db,code,docs,rag,skeleton.",
+                    "description": "Lista separada por vírgula: map,db,code,docs,rag,skeleton.",
                 },
                 "budget": {"type": "integer", "description": "Orçamento em tokens."},
             },

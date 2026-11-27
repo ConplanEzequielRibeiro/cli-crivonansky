@@ -248,8 +248,7 @@ workspace/knowledge/
 ├── code/       src/ (legado, se existir) + ... (não é mais gerado)
 ├── db/         schema-catalog.json + tables/*.md
 ├── links/      code-db-links + fk-inferred + includes + tables/*.md
-├── docs/       manuals/ + tickets/ + manifest.json
-└── notes/      resumos auditados (opcional, buscáveis com scope=notes)
+└── docs/       manuals/ + tickets/ + manifest.json
 ```
 
 ## Tarefas
@@ -257,7 +256,7 @@ workspace/knowledge/
 | Tarefa | Intent | Descrição |
 |---|---|---|
 | `code:skeleton` | read | Esqueleto em níveis (índice, `level=map`, `level=dir path=`); `split_map` gera o mapa completo em partes + índice; incremental |
-| `code:search` | read | Busca textual (ripgrep) no repositório ou notas |
+| `code:search` | read | Busca textual (ripgrep) no repositório |
 | `code:read` | read | Lê um intervalo de linhas |
 | `code:outline` | read | Imports + assinaturas de um arquivo |
 | `code:symbol` | read | Definições e chamadas de um símbolo |
@@ -278,14 +277,10 @@ workspace/knowledge/
 | `docker:exec` | write | Comando no contêiner |
 | `logs:tail` | read | Logs de contêiner |
 | `patch:apply` | write | Aplica diff preservando encoding/CRLF/BOM; exige branch não protegida |
-| `notes:draft` | read | Rascunho de ficha de módulo (frontmatter + seções) |
-| `notes:save` | write | Valida e grava a ficha em `notes_path` (mostra diff) |
-| `notes:stale` | read | Fichas cujos arquivos de origem mudaram |
 | `state:save` / `state:load` / `state:list` | write/read/read | Estado de tarefa (`crivonansky-state`) para retomar numa conversa nova |
 | `watch:clip` | read | Monitora o clipboard e executa blocos novos (política e y/N do `exec`) |
-| `watch:downloads` | read | Monitora downloads: `.patch`, fichas e estados, sempre com confirmação |
-| `kb:export` | write | Pasta com MAPA, glossário, ADRs e fichas revisadas (redact + MANIFEST) |
-| `clean:artifacts` | write | Remove artefatos regeráveis (`knowledge/*`, exceto `notes`) |
+| `watch:downloads` | read | Monitora downloads: `.patch` e estados, sempre com confirmação |
+| `clean:artifacts` | write | Remove artefatos regeráveis (`knowledge/*`, exceto notas legadas) |
 | `clean:runs` | write | Remove execuções antigas de `runs/` e compacta o `runs.jsonl` |
 | `test:run` / `verify` / `lint` | read | Pipelines do `harness.yaml` |
 | `prompt` | read | Prompt do LLM no clipboard |
@@ -295,7 +290,7 @@ executam** `shell:run`, `py:run` e `docker:exec` (só o usuário, pela linha de 
 configurável em `policy.llm_denied_tasks` / `policy.llm_allowed_tasks`). Na TUI a
 confirmação abre um modal (`y`/`n`) com a prévia da tarefa; no terminal continua `y/N`.
 
-## Esqueleto em níveis e fichas
+## Esqueleto em níveis
 
 `code:skeleton` grava em `workspace/knowledge/skeleton/`:
 
@@ -331,20 +326,16 @@ para `code:skeleton` e `db:links`. Toda saída cortada traz `[truncado: N … �
 comentários HTML ou blocos de template não são mais perdidos. Ao mudar o parser, a
 versão do `project.json` é incrementada e o cache incremental é refeito.
 
-**Fichas** são Markdown com frontmatter (`modulo`, `tags`, `tabelas`, `arquivos`,
-`hash_fonte`, `revisado`, `atualizado_em`) e seis seções fixas. Ficam em
-`knowledge.notes_path` (repositório git próprio; padrão `workspace/knowledge/notes/`).
-Fluxo: `notes:draft --module cadastro` → completar no chat → `notes:save --clip` →
-`notes:stale` (roda no hook pós-commit) lista as fichas cujos arquivos mudaram.
-`notes:save` não faz commit; você revisa o diff no repositório de notas.
+> As notas/fichas (`notes:*`) e o `kb:export` foram removidos (R0); o mapa em
+> `workspace/knowledge/skeleton/` é a fonte de navegação.
 
-## Estado, monitores e exportação
+## Estado e monitores
 
 **Estado de tarefa.** O prompt pede que o Claude encerre com um bloco `crivonansky-state`
 (`tarefa`, `decisoes`, `arquivos`, `pendencias`, `proximo_passo`).
 
 ```text
-state save --clip            # valida e grava em <notes_path>/estado/AAAA-MM-DD-<tarefa>.md
+state save --clip            # valida e grava em <workspace>/state/estado/AAAA-MM-DD-<tarefa>.md
 state list
 state load --last            # ou: state load <parte-do-nome>; devolve o prompt de abertura
 ```
@@ -403,16 +394,10 @@ Variáveis aceitas: `CRIVONANSKY_PYTHON`, `CRIVONANSKY_CLI`, `CRIVONANSKY_CWD`,
 - `watch clip` (intervalo `--interval_ms`, padrão 500): reage só a blocos `crivonansky`
   novos, ignora o próprio `crivonansky-result`, executa pelo mesmo caminho do `exec`
   (política, y/N, redact, truncamento) e deixa o resultado no clipboard.
-- `watch downloads [--path P] [--branch B]`: reconhece `*.patch` (→ `patch:apply`), fichas
-  `.md` válidas (→ `notes:save`) e blocos de estado (→ `state:save`). Só trata arquivos
-  novos desde o início (`--include_existing` para os antigos), pergunta sempre, nunca apaga
-  o arquivo e lembra o que já viu em `runs/watch-downloads.json`.
-
-**`kb export`** grava em `workspace/kb_export/` (ou `kb.export_path`) `MAPA.md`,
-`glossario.md`, `adr/*.md` e as fichas com `revisado: true`, aplicando `redact`, respeitando
-`kb.max_chars` (padrão 200.000; o que não cabe é listado) e gerando `MANIFEST.md` com o hash
-de cada arquivo e o que mudou desde a última exportação. As fichas entram da mais recente
-para a mais antiga (ainda não há contagem de consultas).
+- `watch downloads [--path P] [--branch B]`: reconhece `*.patch` (→ `patch:apply`) e
+  blocos de estado (→ `state:save`). Só trata arquivos novos desde o início
+  (`--include_existing` para os antigos), pergunta sempre, nunca apaga o arquivo e lembra
+  o que já viu em `runs/watch-downloads.json`. Fichas `.md` não são mais reconhecidas.
 
 ## Privacidade (`policy.redact`)
 
@@ -458,7 +443,7 @@ run clean:runs      [--days 30] [--keep 100] [--param dry_run=true]
 
 - **`clean:artifacts`** remove `knowledge/{skeleton,db,links,docs}` e, com
   `legacy-code`, o resíduo da v1 em `knowledge/code/` (que nenhuma tarefa atual lê).
-  **Nunca** toca `knowledge/notes/` (fichas) nem o `harness.yaml`.
+  **Nunca** toca `knowledge/notes/` legado, `state/` nem o `harness.yaml`.
 - **`clean:runs`** apaga execuções mais antigas que `days` **e** fora das `keep` mais
   recentes (proteção dupla) e reescreve o `runs.jsonl` só com execuções existentes.
   Diretórios fora do padrão `c-<8 hex>` (ex.: `rag-api.*`) são ignorados.
@@ -488,10 +473,9 @@ Campos relevantes:
 | `legacy.exclude` / `skeleton.exclude` | `code:skeleton`, `db:links` | Globs excluídos da varredura |
 | `skeleton.max_symbols` / `recent_days` | `code:skeleton` | Símbolos por arquivo no SKELETON.md; janela de commits do ranking |
 | `skeleton.map_split` / `map_part_chars` | `code:skeleton` | Mapa completo em `map/part-NNN.md` + índice; orçamento de cada parte |
-| `output.ask_context` / `ask_budget` / `token_chars` | `ask` | Contextos padrão (`map,notes,db`), orçamento em tokens e caracteres por token |
-| `knowledge.notes_path` | `notes:*`, `code:search scope=notes` | Repositório git das fichas; entra em `allowed_roots` |
+| `output.ask_context` / `ask_budget` / `token_chars` | `ask` | Contextos padrão (`map,db`), orçamento em tokens e caracteres por token |
+| `state.path` | `state:*` | Pasta do estado (padrão: `workspace/state/`); estados antigos são migrados uma vez |
 | `watch.downloads_path` / `watch.patch_branch` | `watch:downloads` | Pasta monitorada (padrão: Downloads do usuário) e branch usada nos patches |
-| `kb.export_path` / `kb.max_chars` | `kb:export` | Destino e limite total de caracteres |
 | `policy.redact.*` | todas as saídas | `enabled`, `patterns`, `columns`, `secrets`, `apply_to`, `keep_raw_log` |
 | `policy.llm_denied_tasks` / `llm_allowed_tasks` | blocos do LLM | Padrão nega `shell:run`, `py:run`, `docker:exec` |
 | `patch.protected_branches` / `allow_dirty` | `patch:apply` | Branches que exigem `branch`; aceitar árvore suja |

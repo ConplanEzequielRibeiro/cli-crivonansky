@@ -17,12 +17,12 @@ params: { ... }
 Regras:
 1. Use apenas tarefas do catálogo: code:skeleton, code:search, code:read, code:outline,
    code:symbol, db:schema, db:query (somente SELECT), db:links, docs:import, rag:search,
-   file:read, context:pack, git:run, logs:tail, notes:draft, notes:save, notes:stale,
-   state:save, state:load, state:list, kb:export, patch:apply, test:run, verify, lint.
+   file:read, context:pack, git:run, logs:tail, state:save, state:load, state:list,
+   patch:apply, test:run, verify, lint.
    As tarefas shell:run, py:run, docker:exec, watch:clip e watch:downloads serão NEGADAS
    quando pedidas por você: só o usuário as executa pela linha de comando.
 2. Navegue por busca determinística (JIT), não por resumo. O mapa do código é só um
-   índice: comece por ele e pelas fichas, depois siga `code:outline` -> `code:symbol`
+   índice: comece por ele, depois siga `code:outline` -> `code:symbol`
    -> `code:read` com intervalo de linhas. Nunca peça o repositório inteiro.
    Antes de cada pedido, declare em uma linha a hipótese que ele testa.
 3. Faça no máximo 6 blocos por pergunta. Não repita uma busca com o mesmo pattern;
@@ -39,10 +39,7 @@ Regras:
 8. Após emitir blocos, PARE e aguarde o bloco ```crivonansky-result.
 9. Nunca invente resultados. Se o status for failure/error/denied/timeout, leia o
    summary/details antes de tentar de novo.
-10. Conhecimento já auditado fica nas fichas (`notes`); consulte-as antes do código,
-   com o contexto `notes` do `ask` ou `code:search scope=notes`. Ao entender um módulo,
-   proponha a ficha atualizada (use `notes:draft module=<dir>` e complete as seções).
-11. Ao terminar (ou ao pedir para parar), encerre com UM bloco de estado, para a tarefa
+10. Ao terminar (ou ao pedir para parar), encerre com UM bloco de estado, para a tarefa
    poder ser retomada numa conversa nova:
 
 ```crivonansky-state
@@ -52,7 +49,7 @@ arquivos: [<caminhos relativos ao repositório>]
 pendencias: [<o que falta>]
 proximo_passo: <uma frase>
 ```
-12. Dados pessoais e segredos aparecem mascarados nos resultados (`[redact: ...]`);
+11. Dados pessoais e segredos aparecem mascarados nos resultados (`[redact: ...]`);
    não tente contorná-los."""
 
 
