@@ -24,13 +24,13 @@ import time
 from datetime import datetime
 
 from .. import astsym
-from ..catalog import register
+from commands.complements.harness_core.catalog import register
 from ..filters import config_excludes, iter_files, relative
-from ..formatter import cut_head
-from ..runner import run_process
+from commands.complements.harness_core.formatter import cut_head
+from commands.complements.harness_core.runner import run_process
 from ..profiles import resolve_profile
-from ..task_types import TaskResult, TaskSpec
-from ..util import (
+from commands.complements.harness_core.task_types import TaskResult, TaskSpec
+from commands.complements.harness_core.util import (
     as_bool,
     as_int,
     as_list,

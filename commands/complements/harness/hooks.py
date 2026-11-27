@@ -5,8 +5,8 @@ import shutil
 import stat
 import sys
 
-from .config import get_legacy_path, get_workspace
-from .util import ensure_dir
+from commands.complements.harness_core.config import get_legacy_path, get_workspace
+from commands.complements.harness_core.util import ensure_dir
 
 HOOK_NAMES = ("post-commit", "post-merge")
 MARKER = "# harness-hook"

@@ -4,9 +4,9 @@ import os
 import time
 
 from .. import watch
-from ..catalog import register
-from ..task_types import TaskResult, TaskSpec
-from ..util import as_bool, as_int, workspace
+from commands.complements.harness_core.catalog import register
+from commands.complements.harness_core.task_types import TaskResult, TaskSpec
+from commands.complements.harness_core.util import as_bool, as_int, workspace
 
 
 def _engine(ctx):

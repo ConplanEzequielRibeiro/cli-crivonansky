@@ -12,8 +12,8 @@ import time
 
 import yaml
 
-from . import state
-from .contract import extract_blocks
+from commands.complements.harness_core import state_contract as state
+from commands.complements.harness_core.contract import extract_blocks
 
 STOP_FILE = "watch.stop"
 SEEN_FILE = "watch-downloads.json"

@@ -17,22 +17,22 @@ import re
 import shutil
 
 from .. import astsym, redact
-from ..catalog import register
-from ..config import get_tool_path
+from commands.complements.harness_core.catalog import register
+from commands.complements.harness_core.config import get_tool_path
 from ..filters import SKIP_DIRS
-from ..formatter import truncation_marker
+from commands.complements.harness_core.formatter import truncation_marker
 from ..profiles import resolve_profile
-from ..runner import run_process
-from ..task_types import TaskResult, TaskSpec
-from ..util import (
+from commands.complements.harness_core.runner import run_process
+from commands.complements.harness_core.task_types import TaskResult, TaskSpec
+from commands.complements.harness_core.util import (
     as_int,
     ensure_allowed,
     legacy_repo,
     looks_like_path,
     read_text,
-    source_encoding,
     workspace,
 )
+from ..encoding import source_encoding
 
 DEFAULT_MAX_RESULTS = 20
 DEFAULT_MAX_LINES = 200

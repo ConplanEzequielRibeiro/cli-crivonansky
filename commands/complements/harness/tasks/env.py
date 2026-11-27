@@ -3,13 +3,13 @@
 import os
 import urllib.request
 
-from ..catalog import register
-from ..config import get_legacy, get_tool, get_tool_path
+from commands.complements.harness_core.catalog import register
+from commands.complements.harness_core.config import get_legacy, get_tool, get_tool_path
 from ..filters import iter_files
 from ..profiles import resolve_profile
-from ..runner import run_process
-from ..task_types import TaskResult, TaskSpec
-from ..util import legacy_repo, looks_like_path
+from commands.complements.harness_core.runner import run_process
+from commands.complements.harness_core.task_types import TaskResult, TaskSpec
+from commands.complements.harness_core.util import legacy_repo, looks_like_path
 from .rag import tools_problem
 
 FILE_COUNT_CAP = 20000

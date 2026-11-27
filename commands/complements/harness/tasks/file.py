@@ -2,11 +2,12 @@
 
 import os
 
-from .. import redact
-from ..catalog import register
-from ..formatter import truncation_marker
-from ..task_types import TaskResult, TaskSpec
-from ..util import as_int, as_list, ensure_allowed, read_text, source_encoding
+from commands.complements.harness_core import redact
+from commands.complements.harness_core.catalog import register
+from commands.complements.harness_core.formatter import truncation_marker
+from commands.complements.harness_core.task_types import TaskResult, TaskSpec
+from commands.complements.harness_core.util import as_int, as_list, ensure_allowed, read_text
+from ..encoding import source_encoding
 
 
 def handle_read(ctx, params):

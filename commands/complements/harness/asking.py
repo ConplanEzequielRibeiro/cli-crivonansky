@@ -5,7 +5,7 @@ código, docs e RAG; o orçamento é estimado em caracteres/token (padrão 4) e
 distribuído por prioridade, com truncamento explícito.
 """
 
-from .formatter import cut_head
+from commands.complements.harness_core.formatter import cut_head
 
 # Do mais para o menos importante no corte.
 PRIORITY = ("map", "skeleton", "db", "code", "docs", "rag")

@@ -9,10 +9,11 @@ Também exige uma branch de trabalho e uma árvore limpa nos arquivos tocados.
 import os
 
 from .. import patching
-from ..catalog import get_task, register
-from ..runner import run_process
-from ..task_types import TaskResult, TaskSpec
-from ..util import as_bool, as_int, ensure_dir, legacy_repo, source_encoding
+from commands.complements.harness_core.catalog import get_task, register
+from commands.complements.harness_core.runner import run_process
+from commands.complements.harness_core.task_types import TaskResult, TaskSpec
+from commands.complements.harness_core.util import as_bool, as_int, ensure_dir, legacy_repo
+from ..encoding import source_encoding
 
 DEFAULT_PROTECTED = ["main", "master", "develop", "production", "producao"]
 

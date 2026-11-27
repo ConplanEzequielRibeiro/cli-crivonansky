@@ -3,11 +3,11 @@
 import shutil
 import sys
 
-from ..catalog import register
-from ..config import get_tool_path
-from ..runner import run_process
-from ..task_types import TaskResult, TaskSpec
-from ..util import ensure_allowed, legacy_repo
+from commands.complements.harness_core.catalog import register
+from commands.complements.harness_core.config import get_tool_path
+from commands.complements.harness_core.runner import run_process
+from commands.complements.harness_core.task_types import TaskResult, TaskSpec
+from commands.complements.harness_core.util import ensure_allowed, legacy_repo
 
 
 def _cwd(ctx, params) -> str:

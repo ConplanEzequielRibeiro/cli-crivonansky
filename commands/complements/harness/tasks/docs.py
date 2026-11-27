@@ -4,10 +4,10 @@ import json
 import os
 import shutil
 
-from ..catalog import register
-from ..config import get_legacy, get_legacy_path
-from ..task_types import TaskResult, TaskSpec
-from ..util import ensure_dir, workspace, write_json, write_text
+from commands.complements.harness_core.catalog import register
+from commands.complements.harness_core.config import get_legacy, get_legacy_path
+from commands.complements.harness_core.task_types import TaskResult, TaskSpec
+from commands.complements.harness_core.util import ensure_dir, workspace, write_json, write_text
 
 MANUAL_EXTENSIONS = {".pdf", ".md", ".txt"}
 ATTACHMENT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".pdf"}

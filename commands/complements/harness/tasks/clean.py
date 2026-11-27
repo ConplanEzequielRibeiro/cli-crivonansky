@@ -10,9 +10,9 @@ import re
 import shutil
 import time
 
-from ..catalog import register
-from ..task_types import TaskResult, TaskSpec
-from ..util import as_bool, as_int, as_list, workspace
+from commands.complements.harness_core.catalog import register
+from commands.complements.harness_core.task_types import TaskResult, TaskSpec
+from commands.complements.harness_core.util import as_bool, as_int, as_list, workspace
 
 # Artefatos que podem ser regerados pelas tarefas de coleta.
 ARTIFACT_SCOPES = {

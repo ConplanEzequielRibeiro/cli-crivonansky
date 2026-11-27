@@ -7,13 +7,13 @@ import re
 import sqlglot
 from sqlglot import exp
 
-from .. import redact
-from ..catalog import register
-from ..config import get_legacy, get_legacy_path
+from commands.complements.harness_core import redact
+from commands.complements.harness_core.catalog import register
+from commands.complements.harness_core.config import get_legacy, get_legacy_path
 from ..profiles import resolve_profile
-from ..runner import run_process
-from ..task_types import TaskResult, TaskSpec
-from ..util import (
+from commands.complements.harness_core.runner import run_process
+from commands.complements.harness_core.task_types import TaskResult, TaskSpec
+from commands.complements.harness_core.util import (
     as_int,
     ensure_dir,
     legacy_repo,

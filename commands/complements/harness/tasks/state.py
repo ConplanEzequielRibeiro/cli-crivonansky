@@ -3,11 +3,11 @@
 import difflib
 import os
 
-from .. import state as st
-from ..catalog import register
-from ..formatter import cut_head
-from ..task_types import TaskResult, TaskSpec
-from ..util import ensure_dir, is_within, read_text, state_path, workspace
+from commands.complements.harness_core import state_contract as st
+from commands.complements.harness_core.catalog import register
+from commands.complements.harness_core.formatter import cut_head
+from commands.complements.harness_core.task_types import TaskResult, TaskSpec
+from commands.complements.harness_core.util import ensure_dir, is_within, read_text, state_path, workspace
 
 MAP_LIMIT = 6000
 
@@ -17,7 +17,7 @@ def _legacy_state_dir(ctx) -> str | None:
     configured = ((ctx.config or {}).get("knowledge") or {}).get("notes_path")
     if not configured:
         return None
-    from ..config import resolve_path
+    from commands.complements.harness_core.config import resolve_path
 
     return os.path.join(resolve_path(ctx.config, str(configured)), st.STATE_DIR)
 
@@ -50,7 +50,7 @@ def _incoming(ctx, params) -> str:
 
         return str(pyperclip.paste() or "")
     if params.get("file"):
-        from ..util import ensure_allowed
+        from commands.complements.harness_core.util import ensure_allowed
 
         return read_text(ensure_allowed(ctx, str(params["file"])))
     return ""

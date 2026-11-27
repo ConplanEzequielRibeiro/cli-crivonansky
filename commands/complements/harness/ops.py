@@ -16,11 +16,11 @@ mesmo antes de as dependências do plugin existirem.
 import os
 from pathlib import Path
 
-from .bootstrap import ensure_deps
+from commands.complements.harness_core.bootstrap import ensure_deps
 from .config_template import config_path, write_default_config
-from .progress import Progress
-from .runner import run_process
-from .task_types import TaskResult
+from commands.complements.harness_core.progress import Progress
+from commands.complements.harness_core.runner import run_process
+from commands.complements.harness_core.task_types import TaskResult
 
 PLUGIN_ROOT = Path(__file__).resolve().parent
 FIXTURE_ROOT = PLUGIN_ROOT / "fixture" / "exemplo-locadora"
@@ -74,7 +74,7 @@ def config_info(config_path_arg: str | None = None) -> dict:
 def _add_tools_info(info: dict, config_path_arg: str | None = None) -> None:
     """Mostra os tools.* resolvidos (best-effort: /harness config roda sem PyYAML)."""
     try:
-        from .config import get_tool_path, load_config
+        from commands.complements.harness_core.config import get_tool_path, load_config
     except Exception:  # noqa: BLE001 - dependências do plugin ainda não instaladas
         return
 
@@ -130,7 +130,7 @@ def _add_profile_info(info: dict, config: dict) -> None:
     info["sql_extensions"] = ", ".join(sorted(profile.sql_extensions)) or "(nenhuma)"
 
     try:
-        from .config import get_workspace
+        from commands.complements.harness_core.config import get_workspace
 
         workspace = get_workspace(config)
     except Exception:  # noqa: BLE001
@@ -197,8 +197,8 @@ def _run_task(config_path_arg: str, task: str, params: dict | None = None) -> Ta
 
     import yaml
 
-    from .catalog import load_tasks
-    from .engine import HarnessEngine
+    from commands.complements.harness_core.catalog import load_tasks
+    from commands.complements.harness_core.engine import HarnessEngine
 
     load_tasks()
     engine = HarnessEngine(

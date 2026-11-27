@@ -7,11 +7,11 @@ import traceback
 import urllib.error
 import urllib.request
 
-from ..catalog import register
-from ..config import get_tool, get_tool_path
-from ..runner import run_process
-from ..task_types import TaskResult, TaskSpec
-from ..util import as_int, looks_like_path, workspace
+from commands.complements.harness_core.catalog import register
+from commands.complements.harness_core.config import get_tool, get_tool_path
+from commands.complements.harness_core.runner import run_process
+from commands.complements.harness_core.task_types import TaskResult, TaskSpec
+from commands.complements.harness_core.util import as_int, looks_like_path, workspace
 
 
 def tools_problem(config: dict) -> str | None:
