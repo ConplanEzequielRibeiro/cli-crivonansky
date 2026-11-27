@@ -23,6 +23,11 @@ _CATALOG = {spec.name: spec for spec in all_tasks()}
 EXPECTED = {
     "clean:artifacts": ("write", [], ["scope", "dry_run"]),
     "clean:runs": ("write", [], ["days", "keep", "dry_run"]),
+    "code:brief": (
+        "read",
+        [],
+        ["path", "table", "symbol", "dir", "changed", "mode", "budget", "max_paths", "max_tables", "json"],
+    ),
     "code:outline": ("read", ["file"], []),
     "code:read": ("read", ["file"], ["start", "end", "max_lines"]),
     "code:search": ("read", ["pattern"], ["path", "glob", "max_results", "scope"]),
@@ -70,6 +75,7 @@ EXPECTED = {
 OWNER = {
     "clean:artifacts": "harness_clean",
     "clean:runs": "harness_clean",
+    "code:brief": "harness",
     "code:outline": "harness",
     "code:read": "harness",
     "code:search": "harness",
@@ -117,7 +123,7 @@ PACKS = {
 
 # Hash de EXPECTED (nome -> [intent, required, optional]). Qualquer mudança de
 # assinatura exige atualizar este valor de forma explícita.
-CONTRACT_SHA256 = "fc6c304805f1e2c124c03cd10cc13c788a788faa9595ea874b79b370bd908fff"
+CONTRACT_SHA256 = "a5b4ebfe96209d6d644db3537f49fedb974845affa9663216460fdece0a7cd8f"
 
 
 def _catalog():
@@ -125,7 +131,7 @@ def _catalog():
 
 
 def test_inventory_count():
-    assert len(_catalog()) == 34
+    assert len(_catalog()) == 35
 
 
 def test_inventory_matches_frozen_names():
@@ -150,7 +156,7 @@ def test_owner_map_covers_every_task():
 
 def test_target_pack_distribution():
     assert Counter(OWNER.values()) == {
-        "harness": 16,
+        "harness": 17,
         "harness_exec": 5,
         "harness_patch": 1,
         "harness_validate": 3,
