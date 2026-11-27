@@ -77,6 +77,7 @@ only the semantic layer (manuals, tickets, db schema and `db:links` output).
 | `commands/complements/harness/graphdb.py` | Store SQLite (`graph.sqlite`), cache incremental e consultas de impacto |
 | `commands/complements/harness/briefing.py` | Montagem do `code:brief` (âncora, impacto, budget, omissões) |
 | `commands/complements/harness/audit.py` | Ledger de remoção/migração e verificação fail-closed |
+| `commands/complements/harness/evals.py` | 5 tarefas-ouro e métricas do brief (`runs/evals/`) |
 | `commands/complements/harness_core/` | Infra compartilhada: contrato, engine, política, config, runs, redact, `paths.py` e `packs.py` |
 | `commands/complements/harness*/pack.py` | Manifesto do pack (`TASKS`, `SHORTCUTS`, `DEFAULT_LLM_DENIED`, `load_tasks`) |
 

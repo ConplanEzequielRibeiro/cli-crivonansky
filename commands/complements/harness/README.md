@@ -423,6 +423,18 @@ O ledger (`harness.audit-ledger.v1`) cobre oito classes: `schema-object`,
 (`audit.ledgers_path`); `audit:verify` reexecuta as buscas e falha fechado com
 `--fail_on_leftovers` enquanto houver referência ativa ou desconhecida.
 
+## Evals do brief
+
+```powershell
+python commands/complements/harness/scripts/eval_brief.py
+```
+
+O runner usa 5 tarefas-ouro da fixture (tabelas `tb_alugueis`, `tb_veiculos`,
+`tb_clientes`, `tb_categorias`, `tb_pagamentos`) e grava
+`workspace/runs/evals/brief-*.json` com `first_correct_file@1`, `recall@5`,
+leituras irrelevantes, validação perdida, tokens e truncamentos. Resultado atual:
+**5/5 no primeiro arquivo, recall 1.0, 671 tokens**.
+
 > As notas/fichas (`notes:*`) e o `kb:export` foram removidos (R0); o mapa em
 > `workspace/knowledge/skeleton/` é a fonte de navegação.
 
