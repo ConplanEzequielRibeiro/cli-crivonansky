@@ -375,6 +375,22 @@ run knowledge:verify --json            # saída estruturada
 
 `env:check` mostra o frescor e `ask` prefixa um aviso quando o mapa está `stale`/`dirty`.
 
+## Store SQLite
+
+Além do manifesto, `code:skeleton` e `db:links` alimentam
+`workspace/knowledge/graph.sqlite` (`graph.path`):
+
+| Tabela | Conteúdo |
+|---|---|
+| `files` / `symbols` / `imports` | arquivos, símbolos e imports do esqueleto |
+| `tables` / `table_ops` | tabelas e operações SQL (read/write, arquivo, linha, símbolo) |
+| `fk_inferred` / `includes` | FKs inferidas e `include`/`require`/`import` |
+| `index_cache` | hash + versão do parser por arquivo (reuso incremental) |
+
+O store é consultável por `graphdb.impact_by_table`, `impact_by_symbol` e
+`files_by_surface`; o `code:brief` (M2) usa essas consultas. `harness config` mostra
+`graph` e `graph_exists`.
+
 > As notas/fichas (`notes:*`) e o `kb:export` foram removidos (R0); o mapa em
 > `workspace/knowledge/skeleton/` é a fonte de navegação.
 
@@ -522,6 +538,7 @@ Campos relevantes:
 | `legacy.exclude` / `skeleton.exclude` | `code:skeleton`, `db:links` | Globs excluídos da varredura |
 | `skeleton.max_symbols` / `recent_days` | `code:skeleton` | Símbolos por arquivo no SKELETON.md; janela de commits do ranking |
 | `skeleton.map_split` / `map_part_chars` | `code:skeleton` | Mapa completo em `map/part-NNN.md` + índice; orçamento de cada parte |
+| `graph.path` / `graph.parser_version` | `code:skeleton`, `db:links` | Store SQLite (padrão `workspace/knowledge/graph.sqlite`) e versão do parser |
 | `output.ask_context` / `ask_budget` / `token_chars` | `ask` | Contextos padrão (`map,db`), orçamento em tokens e caracteres por token |
 | `state.path` | `state:*` | Pasta do estado (padrão: `workspace/state/`); estados antigos são migrados uma vez |
 | `watch.downloads_path` / `watch.patch_branch` | `watch:downloads` | Pasta monitorada (padrão: Downloads do usuário) e branch usada nos patches |
