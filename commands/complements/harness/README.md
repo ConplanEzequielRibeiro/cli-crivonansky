@@ -7,6 +7,13 @@ e devolve um bloco `crivonansky-result` (no terminal e no clipboard).
 A troca com o LLM é **manual**: você copia o bloco do chat, cola na TUI (ou usa
 `exec --clip`) e copia o resultado de volta.
 
+> **Migração (D5):** o `/harness` agora é só **mapeamento**. Execução, patch,
+> validação, estado, monitores e limpeza estão em `/harness-exec`,
+> `/harness-patch`, `/harness-validate`, `/harness-state`, `/harness-watch` e
+> `/harness-clean`. `/harness run <task>` ainda encaminha para o pack dono por uma
+> release (`compat.forward_legacy: true`); `plugins.<pack>.enabled=false` desliga
+> um pack.
+
 ## Estratégia: busca JIT, não ingestão vetorial
 
 Código-fonte **não** é vetorizado. O LLM navega pelo repositório com busca
