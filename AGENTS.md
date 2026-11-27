@@ -67,6 +67,7 @@ only the semantic layer (manuals, tickets, db schema and `db:links` output).
 | `commands/complements/harness/asking.py` | Montagem do `ask`: mapa e orçamento de tokens |
 | `commands/complements/harness/tasks/` | Task catalog (`code:*`, `db:*`, `rag:*`, `docs:import`, `git:run`, `shell:run`, `docker:exec`, etc.) |
 | `commands/complements/harness/packs.py` | Registro leve dos packs (`owner_of`, `owner_map`, sem importar handlers) |
+| `commands/complements/harness_core/` | Infra compartilhada: contrato, engine, política, config, runs, redact, `paths.py` e `packs.py` |
 | `commands/complements/harness*/pack.py` | Manifesto do pack (`TASKS`, `SHORTCUTS`, `DEFAULT_LLM_DENIED`, `load_tasks`) |
 
 Lifecycle subcommands:

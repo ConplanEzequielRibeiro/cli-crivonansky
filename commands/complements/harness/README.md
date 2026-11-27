@@ -63,20 +63,23 @@ Para adicionar uma linguagem: registre extensão/kinds em `profiles.py`
 ## Estrutura
 
 ```text
-commands/complements/harness/
-├── install.ps1                  # instalador (venv + config; RAG opcional)
-├── requirements.txt             # deps Python do plugin
-├── harness.example.yaml         # template da configuração
-├── fixture/exemplo-locadora/    # fixture RotaCar (versionada)
-├── workspace/                   # harness.yaml + knowledge/ + runs/ (gitignored)
-├── vendor/                      # local-rag-system (gitignored, só com --with-rag)
-└── .venv/                       # deps do plugin (gitignored)
+commands/complements/
+├── harness/                     # pack de mapeamento + lifecycle/workspace/fixture
+│   ├── install.ps1              # instalador (venv + config; RAG opcional)
+│   ├── requirements.txt         # deps Python do plugin
+│   ├── harness.example.yaml     # template da configuração
+│   ├── fixture/exemplo-locadora/# fixture RotaCar (versionada)
+│   ├── workspace/               # harness.yaml + knowledge/ + runs/ (gitignored)
+│   ├── vendor/                  # local-rag-system (gitignored, só com --with-rag)
+│   └── .venv/                   # deps do plugin (gitignored)
+└── harness_core/                # contrato, engine, política, config, runs, redact,
+                                 # paths e packs.py (compartilhado pelos packs)
 ```
 
 O `install.ps1` cria o venv do plugin, instala `requirements.txt` e gera
-`workspace/harness.yaml` com caminhos absolutos. O pacote `bootstrap.py` adiciona o
-site-packages do plugin ao `sys.path` do crivonansky quando o venv do host não tem as
-dependências.
+`workspace/harness.yaml` com caminhos absolutos. O `harness_core/bootstrap.py` adiciona
+o site-packages do plugin ao `sys.path` do crivonansky quando o venv do host não tem as
+dependências. Os módulos antigos em `harness/` são shims que reexportam o core (D1).
 
 > **Módulos do plugin não podem ter nome de módulo da stdlib.** O plugin já teve um
 > `types.py`, que sombreava o `types` da biblioteca padrão quando a pasta do harness
