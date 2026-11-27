@@ -1,74 +1,21 @@
-"""Montagem do prompt do ``ask``: contextos de notas/mapa e orçamento de tokens.
+"""Montagem do prompt do ``ask``: contextos e orçamento de tokens.
 
-Funções puras (sem clipboard/CLI) para serem testadas. O orçamento é estimado em
-caracteres/token (padrão 4) e distribuído por prioridade; o que não cabe é
-cortado com o marcador padrão ``[truncado: …]`` ou omitido, e o rodapé informa o uso.
+As notas/fichas foram removidas (R0.5). O ``ask`` compõe mapa, esqueleto, banco,
+código, docs e RAG; o orçamento é estimado em caracteres/token (padrão 4) e
+distribuído por prioridade, com truncamento explícito.
 """
 
-import os
-import re
-
-from . import notes
 from .formatter import cut_head
 
-# Do mais para o menos importante no corte: pergunta → notas → mapa → banco → código → docs → RAG.
-PRIORITY = ("notes", "map", "skeleton", "db", "code", "docs", "rag")
-DEFAULT_CONTEXT = "map,notes,db"
+# Do mais para o menos importante no corte.
+PRIORITY = ("map", "skeleton", "db", "code", "docs", "rag")
+DEFAULT_CONTEXT = "map,db"
 DEFAULT_CHARS_PER_TOKEN = 4
-MAX_NOTES = 3
 MIN_USEFUL_CHARS = 200
-_STOP = {
-    "como", "onde", "qual", "quais", "para", "pelo", "pela", "este", "esta", "isso",
-    "quando", "funciona", "sistema", "tabela", "codigo", "código", "que", "com",
-    "uma", "uns", "por", "mais", "sobre", "fazer", "preciso",
-}
 
 
 def estimate_tokens(text: str, chars_per_token: int = DEFAULT_CHARS_PER_TOKEN) -> int:
     return -(-len(text or "") // max(int(chars_per_token or 1), 1))
-
-
-def question_terms(question: str) -> set[str]:
-    terms = {t.lower() for t in re.findall(r"[A-Za-zÀ-ÿ_][\wÀ-ÿ]{2,}", question or "")}
-    return {t for t in terms if t not in _STOP}
-
-
-def _note_terms(meta: dict) -> set[str]:
-    terms = {str(meta.get("modulo") or "").lower()}
-    for key in ("tags", "tabelas"):
-        terms |= {str(v).lower() for v in meta.get(key) or []}
-    for item in meta.get("arquivos") or []:
-        base = os.path.basename(str(item)).lower()
-        terms |= {base, os.path.splitext(base)[0]}
-    # o módulo também casa por cada trecho do caminho
-    terms |= {part for part in str(meta.get("modulo") or "").lower().split("/") if part}
-    return {t for t in terms if t}
-
-
-def select_notes(folder: str, question: str, limit: int = MAX_NOTES) -> list[tuple[str, str, int]]:
-    """Fichas cujos ``tags``/``tabelas``/``arquivos``/``modulo`` casam com a pergunta.
-
-    Devolve ``[(nome, texto, pontos)]`` ordenado por relevância (revisadas primeiro).
-    """
-    terms = question_terms(question)
-    if not terms or not os.path.isdir(folder):
-        return []
-    found = []
-    for name in sorted(os.listdir(folder)):
-        if not name.lower().endswith(".md") or name.startswith("_"):
-            continue
-        path = os.path.join(folder, name)
-        try:
-            with open(path, "r", encoding="utf-8", errors="replace") as fh:
-                text = fh.read()
-            meta, _body = notes.split_note(text)
-        except (OSError, notes.NoteError):
-            continue
-        score = len(terms & _note_terms(meta))
-        if score:
-            found.append((name, text.replace("\r\n", "\n"), score + (0.5 if meta.get("revisado") is True else 0)))
-    found.sort(key=lambda item: (-item[2], item[0]))
-    return [(name, text, int(score)) for name, text, score in found[:limit]]
 
 
 def _dedupe(text: str, seen: set[str]) -> str:
