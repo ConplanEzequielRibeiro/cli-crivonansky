@@ -248,6 +248,7 @@ class HarnessEngine:
             result.artifacts,
             raw,
             result.hint,
+            result.meta,
         )
 
     # ------------------------------------------------------------------
@@ -290,6 +291,7 @@ class HarnessEngine:
         artifacts: list[str],
         raw: str,
         hint: str = "",
+        meta: dict | None = None,
     ) -> tuple[str, str]:
         duration = int((time.time() - start) * 1000)
         summary = mask_secrets(summary, self.config)
@@ -322,19 +324,21 @@ class HarnessEngine:
 
         try:
             self.runs.write(block_id, raw, text, full_log)
-            self.runs.append_index(
-                {
-                    "id": block_id,
-                    "task": task,
-                    "status": status,
-                    "duration_ms": duration,
-                    "approved_by": "none" if status == "denied" else "auto",
-                    "pack": self.pack or "all",
-                    "sinks": self.sinks,
-                    "result_chars": len(text),
-                    "truncated": bool(_truncated),
-                }
-            )
+            record = {
+                "id": block_id,
+                "task": task,
+                "status": status,
+                "duration_ms": duration,
+                "approved_by": "none" if status == "denied" else "auto",
+                "pack": self.pack or "all",
+                "sinks": self.sinks,
+                "result_chars": len(text),
+                "truncated": bool(_truncated),
+            }
+            for key, value in (meta or {}).items():
+                if isinstance(value, (str, int, float, bool, list, dict)) or value is None:
+                    record[key] = value
+            self.runs.append_index(record)
         except OSError:
             pass
 

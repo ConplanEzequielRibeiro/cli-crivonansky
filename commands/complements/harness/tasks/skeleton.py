@@ -827,7 +827,13 @@ def handle(ctx, params):
             or data.get("version")
             or 0
         )
-        store = graphdb.sync_skeleton(ctx, files_index, profile, parser_version)
+        store = graphdb.sync_skeleton(
+            ctx,
+            files_index,
+            profile,
+            parser_version,
+            force=as_bool(params.get("full")),
+        )
         store_note = f"store: {store['files']} arquivo(s) em {store['db']}"
     except Exception as exc:  # noqa: BLE001 - store é complementar
         store_note = f"store: falha ({exc})"

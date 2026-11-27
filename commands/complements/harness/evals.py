@@ -4,7 +4,7 @@ import json
 import os
 from datetime import datetime
 
-from . import briefing
+from . import briefing, graphdb
 from commands.complements.harness_core.util import workspace
 
 GOLD = (
@@ -56,6 +56,13 @@ GOLD = (
 
 def evaluate(ctx, gold=None, budget: int = 6000, max_paths: int = 5) -> dict:
     cases = []
+    conn = graphdb.connect(ctx)
+    try:
+        baseline_paths = [row["path"] for row in conn.execute(
+            "SELECT path FROM files ORDER BY path LIMIT ?", (max_paths,)
+        ).fetchall()]
+    finally:
+        conn.close()
     for case in gold or GOLD:
         packet = briefing.build(
             ctx,
@@ -71,6 +78,7 @@ def evaluate(ctx, gold=None, budget: int = 6000, max_paths: int = 5) -> dict:
         paths = [item["path"] for item in packet.get("read_first") or []]
         expected = list(case.get("expected") or [])
         found = [path for path in paths if path in expected]
+        baseline_found = [path for path in baseline_paths if path in expected]
         cases.append(
             {
                 "id": case["id"],
@@ -83,6 +91,18 @@ def evaluate(ctx, gold=None, budget: int = 6000, max_paths: int = 5) -> dict:
                 "missed_validation": 0 if packet.get("validation") else 1,
                 "brief_tokens": int((packet.get("budget") or {}).get("estimated") or 0),
                 "truncated": bool((packet.get("budget") or {}).get("truncated")),
+                "baseline": {
+                    "read_first": baseline_paths,
+                    "first_correct_file_at_1": bool(
+                        baseline_paths and baseline_paths[0] in expected
+                    ),
+                    "recall_at_5": round(len(baseline_found) / len(expected), 3)
+                    if expected
+                    else 0.0,
+                    "irrelevant_reads": len(
+                        [path for path in baseline_paths if path not in expected]
+                    ),
+                },
             }
         )
 
@@ -90,6 +110,10 @@ def evaluate(ctx, gold=None, budget: int = 6000, max_paths: int = 5) -> dict:
     total_expected = sum(len(case["expected"]) for case in valid)
     total_found = sum(
         len([path for path in case["read_first"] if path in case["expected"]])
+        for case in valid
+    )
+    baseline_found = sum(
+        len([path for path in case["baseline"]["read_first"] if path in case["expected"]])
         for case in valid
     )
     aggregate = {
@@ -100,6 +124,15 @@ def evaluate(ctx, gold=None, budget: int = 6000, max_paths: int = 5) -> dict:
         "missed_validation": sum(case["missed_validation"] for case in valid),
         "brief_tokens_total": sum(case["brief_tokens"] for case in valid),
         "truncated": sum(1 for case in valid if case["truncated"]),
+        "baseline_first_correct_at_1": sum(
+            1 for case in valid if case["baseline"]["first_correct_file_at_1"]
+        ),
+        "baseline_recall_at_5": round(baseline_found / total_expected, 3)
+        if total_expected
+        else 0.0,
+        "baseline_irrelevant_reads": sum(
+            case["baseline"]["irrelevant_reads"] for case in valid
+        ),
     }
     return {
         "schema": "harness.evals.v1",
@@ -134,6 +167,9 @@ def describe(data: dict) -> str:
         f"- validação perdida: {agg['missed_validation']}",
         f"- tokens de brief: {agg['brief_tokens_total']}",
         f"- truncados: {agg['truncated']}",
+        f"- baseline: first@1 {agg['baseline_first_correct_at_1']}/{agg['tasks']}, "
+        f"recall@5 {agg['baseline_recall_at_5']}, "
+        f"irrelevantes {agg['baseline_irrelevant_reads']}",
         "",
     ]
     for case in data["cases"]:

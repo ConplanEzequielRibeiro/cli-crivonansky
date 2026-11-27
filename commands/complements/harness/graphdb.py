@@ -135,7 +135,7 @@ def _language(path: str, profile) -> str:
     return (getattr(profile, "languages", {}) or {}).get(ext, "")
 
 
-def sync_skeleton(ctx, files_index: dict, profile, parser_version: int) -> dict:
+def sync_skeleton(ctx, files_index: dict, profile, parser_version: int, force: bool = False) -> dict:
     """Sincroniza files/symbols/imports a partir do ``files_index`` do esqueleto."""
     repo = os.path.abspath(legacy_repo(ctx))
     conn = connect(ctx)
@@ -171,7 +171,7 @@ def sync_skeleton(ctx, files_index: dict, profile, parser_version: int) -> dict:
                 cached = conn.execute(
                     "SELECT hash, parser_version FROM index_cache WHERE path=?", (rel_norm,)
                 ).fetchone()
-                if cached and cached["hash"] == digest and int(cached["parser_version"]) == parser_version:
+                if cached and cached["hash"] == digest and int(cached["parser_version"]) == parser_version and not force:
                     continue
 
                 conn.execute("DELETE FROM symbols WHERE file_path=?", (rel_norm,))

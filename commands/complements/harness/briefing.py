@@ -2,6 +2,7 @@
 
 import math
 import os
+import re
 import subprocess
 from datetime import datetime
 
@@ -321,3 +322,23 @@ def redact_packet(packet: dict, ctx) -> str:
 
 def render(packet: dict) -> str:
     return _render(packet)
+
+
+def detect_anchor(ctx, question: str) -> dict | None:
+    """Heurística para o `ask` delegar ao brief quando a pergunta cita uma âncora."""
+    tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]{2,}", question or "")
+    if not tokens:
+        return None
+    conn = graphdb.connect(ctx)
+    try:
+        for token in sorted(set(tokens), key=len, reverse=True):
+            if conn.execute("SELECT 1 FROM tables WHERE name=?", (token,)).fetchone():
+                return {"table": token}
+            if conn.execute("SELECT 1 FROM symbols WHERE name LIKE ?", (f"%{token}%",)).fetchone():
+                return {"symbol": token}
+        for token in tokens:
+            if conn.execute("SELECT 1 FROM files WHERE path LIKE ?", (f"%{token}%",)).fetchone():
+                return {"path": token}
+    finally:
+        conn.close()
+    return None

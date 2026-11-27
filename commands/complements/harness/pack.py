@@ -4,11 +4,11 @@ NAME = "harness"
 COMMAND = "harness"
 DESCRIPTION = "Mapeamento: código, banco, documentação/RAG e contexto"
 
-TASKS = ['code:skeleton', 'code:search', 'code:read', 'code:outline', 'code:symbol', 'code:brief', 'db:snapshot', 'db:schema', 'db:query', 'db:links', 'docs:import', 'rag:serve', 'rag:sync', 'rag:search', 'context:pack', 'file:read', 'knowledge:verify', 'audit:removal', 'audit:verify']
+TASKS = ['code:skeleton', 'code:search', 'code:read', 'code:outline', 'code:symbol', 'code:brief', 'db:snapshot', 'db:schema', 'db:query', 'db:links', 'docs:import', 'rag:serve', 'rag:sync', 'rag:search', 'context:pack', 'file:read', 'knowledge:verify', 'audit:removal', 'audit:verify', 'graph:stats', 'graph:export']
 SHORTCUTS = {}
 DEFAULT_LLM_DENIED = []
 
 
 def load_tasks():
     """Importa os handlers deste pack (lazy)."""
-    from .tasks import audit, brief, db, docs, env, file, jit, knowledge, links, prompt, rag, rag_serve, skeleton  # noqa: F401
+    from .tasks import audit, brief, db, docs, env, file, graph, jit, knowledge, links, prompt, rag, rag_serve, skeleton  # noqa: F401

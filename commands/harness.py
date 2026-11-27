@@ -311,6 +311,22 @@ class HarnessCommand(Command):
         sections = []
 
         # `notes` foi removido na R0.5; contextos antigos são ignorados.
+        try:
+            from .complements.harness import briefing
+
+            anchor = briefing.detect_anchor(ctx, question)
+            if anchor:
+                packet = briefing.build(
+                    ctx,
+                    {**anchor, "max_paths": 8, "budget": min(budget or 3000, 3000)},
+                )
+                if not packet.get("error") and packet.get("read_first"):
+                    sections.append(
+                        ("brief", "Brief (âncora detectada)", briefing.render(packet))
+                    )
+        except Exception:  # noqa: BLE001 - brief é complementar
+            pass
+
         if "map" in wanted:
             sections.append(("map", "Mapa do código", self._map_context(engine)))
 

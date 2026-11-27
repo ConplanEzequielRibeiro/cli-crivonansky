@@ -35,6 +35,11 @@ def handle(ctx, params):
         f"brief: {anchor['type']} {anchor['value']} "
         f"({packet['budget']['estimated']} tok)",
         details=text,
+        meta={
+            "tokens": int(packet["budget"]["estimated"]),
+            "omissions": len(packet.get("omissions") or []),
+            "truncated": bool(packet["budget"]["truncated"]),
+        },
     )
 
 

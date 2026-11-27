@@ -29,7 +29,7 @@ def test_cli_tasks_counts_by_pack():
     ok, data = cli.execute("harness", ["tasks"])
 
     assert ok is True
-    assert data["count"] == 21
+    assert data["count"] == 23
 
 
 def test_cli_tasks_exec_pack_counts():

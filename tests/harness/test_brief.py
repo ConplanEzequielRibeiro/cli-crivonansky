@@ -83,6 +83,8 @@ def test_brief_task_json(tmp_path):
     packet = json.loads(result.details.split("\n\n[redact:")[0])
     assert packet["anchor"]["value"] == "tb_veiculos"
     assert "read_first" in packet
+    assert result.meta["tokens"] > 0
+    assert result.meta["omissions"] >= 0
 
 
 def test_brief_render_mentions_source_check(tmp_path):
@@ -94,3 +96,11 @@ def test_brief_render_mentions_source_check(tmp_path):
     assert "# Brief: table `tb_veiculos`" in text
     assert "Ler primeiro" in text
     assert "Confirme no código" in text
+
+
+def test_detect_anchor(tmp_path):
+    ctx = _ctx(tmp_path)
+
+    assert briefing.detect_anchor(ctx, "onde uso tb_veiculos?") == {"table": "tb_veiculos"}
+    assert briefing.detect_anchor(ctx, "o que faz salvar?") == {"symbol": "salvar"}
+    assert briefing.detect_anchor(ctx, "assunto sem relação") is None

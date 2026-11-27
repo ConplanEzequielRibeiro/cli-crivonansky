@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from commands.complements.harness import graphdb
 from commands.complements.harness.task_types import TaskContext
+from commands.complements.harness.tasks import graph as graph_task
 from commands.complements.harness.tasks import links, skeleton
 
 
@@ -126,3 +127,21 @@ def test_skeleton_and_links_feed_store(tmp_path):
     counts = graphdb.stats(ctx)
     assert counts["files"] >= 1
     assert counts["table_ops"] >= 1
+
+
+def test_force_and_graph_tasks(tmp_path):
+    ctx, repo = _ctx(tmp_path)
+    index = _index(repo)
+
+    graphdb.sync_skeleton(ctx, index, _profile(), 3)
+    graphdb.sync_skeleton(ctx, index, _profile(), 3, force=True)
+
+    stats = graph_task.handle_stats(ctx, {"json": True})
+    assert stats.success
+    assert "files" in stats.details
+
+    out = tmp_path / "graph.jsonl"
+    export = graph_task.handle_export(ctx, {"format": "jsonl", "out": str(out)})
+    assert export.success
+    assert out.is_file()
+    assert out.read_text(encoding="utf-8").strip()

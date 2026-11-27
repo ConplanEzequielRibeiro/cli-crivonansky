@@ -49,6 +49,8 @@ EXPECTED = {
     "env:check": ("read", [], []),
     "file:read": ("read", ["path"], ["start", "end"]),
     "git:run": ("read", ["args"], ["repo"]),
+    "graph:export": ("write", [], ["format", "out"]),
+    "graph:stats": ("read", [], ["json"]),
     "knowledge:verify": ("read", [], ["deep", "fail_on_dirty", "json"]),
     "lint": ("read", [], ["filter"]),
     "logs:tail": ("read", ["container"], ["lines"]),
@@ -95,6 +97,8 @@ OWNER = {
     "env:check": "core",
     "file:read": "harness",
     "git:run": "harness_exec",
+    "graph:export": "harness",
+    "graph:stats": "harness",
     "knowledge:verify": "harness",
     "lint": "harness_validate",
     "logs:tail": "harness_exec",
@@ -127,7 +131,7 @@ PACKS = {
 
 # Hash de EXPECTED (nome -> [intent, required, optional]). Qualquer mudança de
 # assinatura exige atualizar este valor de forma explícita.
-CONTRACT_SHA256 = "760e5e571c719b911b88a586d53017330f2ffe8872a8b8c5de91da6bbba1b1b4"
+CONTRACT_SHA256 = "48e555576a3c6e422fe285e2db318a202ad4159d1c3ee5172ef956a55924389f"
 
 
 def _catalog():
@@ -135,7 +139,7 @@ def _catalog():
 
 
 def test_inventory_count():
-    assert len(_catalog()) == 37
+    assert len(_catalog()) == 39
 
 
 def test_inventory_matches_frozen_names():
@@ -160,7 +164,7 @@ def test_owner_map_covers_every_task():
 
 def test_target_pack_distribution():
     assert Counter(OWNER.values()) == {
-        "harness": 19,
+        "harness": 21,
         "harness_exec": 5,
         "harness_patch": 1,
         "harness_validate": 3,

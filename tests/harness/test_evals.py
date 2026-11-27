@@ -46,6 +46,7 @@ def test_evaluate_and_run(tmp_path):
     assert data["schema"] == "harness.evals.v1"
     assert data["aggregate"]["tasks"] == 1
     assert data["aggregate"]["recall_at_5"] == 1.0
+    assert data["aggregate"]["baseline_recall_at_5"] <= data["aggregate"]["recall_at_5"]
     assert data["cases"][0]["brief_tokens"] > 0
     assert data["aggregate"]["truncated"] == 0
 

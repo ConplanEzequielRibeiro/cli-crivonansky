@@ -8,7 +8,7 @@ distribuído por prioridade, com truncamento explícito.
 from commands.complements.harness_core.formatter import cut_head
 
 # Do mais para o menos importante no corte.
-PRIORITY = ("map", "skeleton", "db", "code", "docs", "rag")
+PRIORITY = ("map", "brief", "skeleton", "db", "code", "docs", "rag")
 DEFAULT_CONTEXT = "map,db"
 DEFAULT_CHARS_PER_TOKEN = 4
 MIN_USEFUL_CHARS = 200

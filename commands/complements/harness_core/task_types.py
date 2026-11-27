@@ -16,6 +16,8 @@ class TaskResult:
     status: str | None = None
     # Dica de continuação exibida no marcador de truncamento (ex.: "use `path`").
     hint: str = ""
+    # Métricas opcionais para runs.jsonl (tokens, omissões, classes...).
+    meta: dict = field(default_factory=dict)
 
 
 @dataclass
