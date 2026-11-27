@@ -108,7 +108,7 @@ def test_detect_anchor(tmp_path):
 
 def test_brief_table_lists_every_line_of_a_file_that_also_writes(tmp_path):
     ctx = _ctx(tmp_path)
-    (tmp_path / "repo" / "cadastro" / "painel.php").write_text(
+    (tmp_path / "repo" / "cadastro" / "relatorio.php").write_text(
         "<?php\n"
         "function total() {\n"
         '  return "SELECT COUNT(*) FROM tb_veiculos";\n'
@@ -125,7 +125,7 @@ def test_brief_table_lists_every_line_of_a_file_that_also_writes(tmp_path):
 
     packet = briefing.build(ctx, {"table": "tb_veiculos"})
 
-    items = [item for item in packet["read_first"] if item["path"] == "cadastro/painel.php"]
+    items = [item for item in packet["read_first"] if item["path"] == "cadastro/relatorio.php"]
     assert len(items) == 1
     item = items[0]
     assert item["reason"] == "escreve em tb_veiculos"
@@ -137,4 +137,4 @@ def test_brief_table_lists_every_line_of_a_file_that_also_writes(tmp_path):
     assert "also" not in next(i for i in packet["read_first"] if i["path"] == "cadastro/b.php")
 
     text = briefing.render(packet)
-    assert "`cadastro/painel.php:9-9` — escreve em tb_veiculos (+ lê tb_veiculos: L3, L6)" in text
+    assert "`cadastro/relatorio.php:9-9` — escreve em tb_veiculos (+ lê tb_veiculos: L3, L6)" in text

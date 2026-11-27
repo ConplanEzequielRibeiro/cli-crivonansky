@@ -72,8 +72,8 @@ _TABLE_REF_RE = re.compile(
     re.I,
 )
 
-# Schema interpolado pelo PHP antes da tabela (``{$this->base}.tabela``,
-# ``$this->base.tabela``, ``$base.tabela``). Antes da análise vira um
+# Schema interpolado pelo PHP antes da tabela (``{$this->db}.tabela``,
+# ``$this->db.tabela``, ``$base.tabela``). Antes da análise vira um
 # identificador sentinela (o parser e a heurística o reconhecem como schema) e
 # depois da análise volta para a expressão PHP original.
 _SCHEMA_PREFIX_RE = re.compile(
@@ -163,7 +163,7 @@ def _constant_strings(text: str) -> dict[str, str]:
             values.setdefault(name, body)
 
     # Propriedades de classe: só valem com um único literal não vazio; qualquer
-    # outra atribuição (ex.: ``$this->base = $_SESSION[...]``) torna ambígua.
+    # outra atribuição (ex.: ``$this->db = $_SESSION[...]``) torna ambígua.
     for match in PROP_ASSIGN_RE.finditer(text):
         name = "this->" + match.group(1)
         literal = PROP_LITERAL_RE.match(match.group(2).strip())
@@ -384,8 +384,8 @@ def _analyze_sql(
     """Devolve (entradas, confiança, statements), com confiança parsed | heuristic.
 
     Cada entrada é ``(tabela, operação, tipo, schema)``. O schema é o nome literal
-    (``db.tabela``), a expressão PHP que começa com ``$`` (``{$this->base}.tabela``
-    → ``$this->base``) ou vazio quando a tabela não é qualificada.
+    (``db.tabela``), a expressão PHP que começa com ``$`` (``{$this->db}.tabela``
+    → ``$this->db``) ou vazio quando a tabela não é qualificada.
     """
     sql, refs = _mask_schema_refs(sql)
     statements = _parse_cached(sql, dialect)

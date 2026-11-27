@@ -58,7 +58,7 @@ PROJECT_VERSION = 4
 MAX_PARSE_BYTES = 2 * 1024 * 1024
 
 # Qualificador de schema antes da tabela: literal (``db.tabela``) ou interpolado
-# pelo PHP (``{$this->base}.tabela``, ``$this->base.tabela``, ``$base.tabela``).
+# pelo PHP (``{$this->db}.tabela``, ``$this->db.tabela``, ``$base.tabela``).
 _SCHEMA_QUALIFIER = (
     r"(?:\{\$[^{}\r\n]*\}|\$[A-Za-z_]\w*(?:->\w+)*|[`\"']?[A-Za-z_][\w$]*[`\"']?)\s*\.\s*"
 )

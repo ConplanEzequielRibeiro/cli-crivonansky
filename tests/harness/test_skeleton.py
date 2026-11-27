@@ -281,11 +281,11 @@ def test_skeleton_disabling_split_removes_old_parts(tmp_path):
 
 def test_skeleton_tables_ignore_schema_qualifier(tmp_path):
     ctx = _context(tmp_path)
-    (tmp_path / "repo" / "cadastro" / "painel.php").write_text(
+    (tmp_path / "repo" / "cadastro" / "relatorio.php").write_text(
         "<?php\n"
-        '$a = "SELECT * FROM {$this->base}.denuncias d";\n'
-        '$b = "UPDATE $this->base.denuncias SET status=1";\n'
-        '$c = "SELECT codigo FROM conplan_sgg_clientes.base WHERE 1";\n',
+        '$a = "SELECT * FROM {$this->db}.tb_ordens d";\n'
+        '$b = "UPDATE $this->db.tb_ordens SET situacao=1";\n'
+        '$c = "SELECT chave FROM schema_a.tb_config WHERE 1";\n',
         encoding="utf-8",
     )
 
@@ -296,7 +296,7 @@ def test_skeleton_tables_ignore_schema_qualifier(tmp_path):
             encoding="utf-8"
         )
     )
-    assert project["tables"]["denuncias"] == ["cadastro/painel.php"]
-    assert project["tables"]["base"] == ["cadastro/painel.php"]
-    assert "conplan_sgg_clientes" not in project["tables"]
+    assert project["tables"]["tb_ordens"] == ["cadastro/relatorio.php"]
+    assert project["tables"]["tb_config"] == ["cadastro/relatorio.php"]
+    assert "schema_a" not in project["tables"]
     assert "{" not in "".join(project["tables"])
