@@ -83,6 +83,13 @@ output:
 #   path: "{{PLUGIN_ROOT}}/workspace/knowledge/graph.sqlite"
 #   parser_version: 3
 
+# Brief ancorado (M2): budget em tokens e caps do pacote.
+# brief:
+#   default_budget: 6000
+#   max_budget: 12000
+#   max_paths: 15
+#   max_tables: 10
+
 # Monitores (watch:downloads) e estado de tarefa.
 # watch:
 #   downloads_path: "C:/Users/voce/Downloads"

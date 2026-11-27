@@ -270,6 +270,7 @@ workspace/knowledge/
 | `code:read` | read | Lê um intervalo de linhas |
 | `code:outline` | read | Imports + assinaturas de um arquivo |
 | `code:symbol` | read | Definições e chamadas de um símbolo |
+| `code:brief` | read | Pacote limitado para path/tabela/símbolo/dir, com impacto, budget e omissões |
 | `env:check` | read | Verifica git, docker, workspace e RAG opcional |
 | `context:pack` | read | Empacota arquivos em Markdown |
 | `file:read` | read | Lê arquivo com números de linha |
@@ -304,7 +305,7 @@ o dono sem importar handlers.
 
 | Pack | Comando | Tarefas |
 |---|---|---|
-| `harness` | `/harness` | `code:*` (5), `db:*` (4), `docs:import`, `rag:*` (3), `context:pack`, `file:read`, `knowledge:verify` |
+| `harness` | `/harness` | `code:*` (6), `db:*` (4), `docs:import`, `rag:*` (3), `context:pack`, `file:read`, `knowledge:verify` |
 | `harness_exec` | `/harness-exec` | `shell:run`, `py:run`, `docker:exec`, `logs:tail`, `git:run` |
 | `harness_patch` | `/harness-patch` | `patch:apply` |
 | `harness_validate` | `/harness-validate` | `test:run`, `verify`, `lint` |
@@ -390,6 +391,21 @@ Além do manifesto, `code:skeleton` e `db:links` alimentam
 O store é consultável por `graphdb.impact_by_table`, `impact_by_symbol` e
 `files_by_surface`; o `code:brief` (M2) usa essas consultas. `harness config` mostra
 `graph` e `graph_exists`.
+
+## Brief ancorado (`code:brief`)
+
+```text
+code:brief --table tb_alugueis
+code:brief --path codigo-fonte/aluguel/devolver.php
+code:brief --symbol salvar_veiculo
+code:brief --dir cadastro --mode planning --budget 4000
+code:brief --changed --json
+```
+
+O pacote (`harness.brief.v1`) traz frescor, âncora resolvida, arquivos para ler
+primeiro, impacto (tabelas/escritas/leituras/FKs), pipelines de validação, achados,
+omissões e o próximo comando. O budget (padrão 6.000 tokens, teto 12.000) corta a
+lista e registra o que ficou de fora; `--json` devolve o mesmo pacote.
 
 > As notas/fichas (`notes:*`) e o `kb:export` foram removidos (R0); o mapa em
 > `workspace/knowledge/skeleton/` é a fonte de navegação.
@@ -539,6 +555,7 @@ Campos relevantes:
 | `skeleton.max_symbols` / `recent_days` | `code:skeleton` | Símbolos por arquivo no SKELETON.md; janela de commits do ranking |
 | `skeleton.map_split` / `map_part_chars` | `code:skeleton` | Mapa completo em `map/part-NNN.md` + índice; orçamento de cada parte |
 | `graph.path` / `graph.parser_version` | `code:skeleton`, `db:links` | Store SQLite (padrão `workspace/knowledge/graph.sqlite`) e versão do parser |
+| `brief.default_budget` / `max_budget` / `max_paths` / `max_tables` | `code:brief` | Orçamento em tokens e caps do pacote |
 | `output.ask_context` / `ask_budget` / `token_chars` | `ask` | Contextos padrão (`map,db`), orçamento em tokens e caracteres por token |
 | `state.path` | `state:*` | Pasta do estado (padrão: `workspace/state/`); estados antigos são migrados uma vez |
 | `watch.downloads_path` / `watch.patch_branch` | `watch:downloads` | Pasta monitorada (padrão: Downloads do usuário) e branch usada nos patches |
