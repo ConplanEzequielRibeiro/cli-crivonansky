@@ -48,8 +48,9 @@ HEREDOC_RE = re.compile(
     re.S,
 )
 
-# Parte de uma concatenação PHP: string literal, $var ou {$var}.
-_PHP_PART = r"""(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|\$[A-Za-z_]\w*|\{\$[A-Za-z_]\w*\})"""
+# Parte de uma concatenação PHP: string literal, $var, $this->prop, {$var} ou {$this->prop}.
+_PHP_VAR = r"(?:this->\w+|[A-Za-z_]\w*)"
+_PHP_PART = rf"""(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|\${_PHP_VAR}|\{{\${_PHP_VAR}\}})"""
 CONCAT_RE = re.compile(rf"{_PHP_PART}(?:\s*\.\s*{_PHP_PART})+", re.S)
 PART_RE = re.compile(_PHP_PART, re.S)
 
@@ -59,8 +60,24 @@ ASSIGN_RE = re.compile(
     re.S,
 )
 
+# Propriedade com literal: ``$this->tabela = 'tb_x';`` ou ``private $tabela = 'tb_x';``.
+PROP_ASSIGN_RE = re.compile(
+    r"(?:\$this->|\b(?:private|protected|public|var)\s+(?:static\s+)?\$)(\w+)\s*=(?!=)\s*([^;]*);",
+)
+PROP_LITERAL_RE = re.compile(r"""^(['"])((?:\\.|(?!\1).)*)\1$""", re.S)
+
+# Grupos: palavra-chave, schema (opcional) e tabela.
 _TABLE_REF_RE = re.compile(
-    r"\b(FROM|JOIN|INTO|UPDATE|USING)\s+(?:`?[A-Za-z_]\w*`?\s*\.\s*)?`?([A-Za-z_]\w*)`?",
+    r"\b(FROM|JOIN|INTO|UPDATE|USING)\s+(?:`?([A-Za-z_]\w*)`?\s*\.\s*)?`?([A-Za-z_]\w*)`?",
+    re.I,
+)
+
+# Schema interpolado pelo PHP antes da tabela (``{$this->base}.tabela``,
+# ``$this->base.tabela``, ``$base.tabela``). Antes da análise vira um
+# identificador sentinela (o parser e a heurística o reconhecem como schema) e
+# depois da análise volta para a expressão PHP original.
+_SCHEMA_PREFIX_RE = re.compile(
+    r"\b(FROM|JOIN|INTO|UPDATE|USING)(\s+)(\{\$[^{}]*\}|\$[A-Za-z_]\w*(?:->\w+)*)\s*\.\s*(?=[`\"']?[A-Za-z_])",
     re.I,
 )
 
@@ -144,6 +161,19 @@ def _constant_strings(text: str) -> dict[str, str]:
             values[name] = None
         else:
             values.setdefault(name, body)
+
+    # Propriedades de classe: só valem com um único literal não vazio; qualquer
+    # outra atribuição (ex.: ``$this->base = $_SESSION[...]``) torna ambígua.
+    for match in PROP_ASSIGN_RE.finditer(text):
+        name = "this->" + match.group(1)
+        literal = PROP_LITERAL_RE.match(match.group(2).strip())
+        body = literal.group(2) if literal else None
+        if not body or "$" in body:
+            values[name] = None
+        elif name in values and values[name] != body:
+            values[name] = None
+        else:
+            values.setdefault(name, body)
     return {name: value for name, value in values.items() if value is not None}
 
 
@@ -155,8 +185,8 @@ def _expand_vars(sql: str, constants: dict[str, str]) -> str:
         name = match.group(1)
         return constants.get(name, match.group(0))
 
-    sql = re.sub(r"\{\$([A-Za-z_]\w*)\}", replace, sql)
-    return re.sub(r"\$([A-Za-z_]\w*)", replace, sql)
+    sql = re.sub(rf"\{{\$({_PHP_VAR})\}}", replace, sql)
+    return re.sub(rf"\$({_PHP_VAR})", replace, sql)
 
 
 def _part_value(part: str, constants: dict[str, str]) -> str:
@@ -189,8 +219,12 @@ def _iter_sql(text: str, index: LineIndex | None = None):
     for match in CONCAT_RE.finditer(text):
         if _overlaps(match.span(), consumed):
             continue
-        consumed.append(match.span())
         parts = PART_RE.findall(match.group(0))
+        if not any(part[0] in "'\"" for part in parts):
+            # Só variáveis (ex.: "{$a}.{$b}" dentro de uma string): não é SQL e não
+            # deve bloquear a string que a contém.
+            continue
+        consumed.append(match.span())
         sql = "".join(_part_value(part, constants) for part in parts)
         if SQL_KEYWORDS.search(sql):
             candidates.append((index.line(match.start()), sql))
@@ -237,15 +271,19 @@ def _target_table(stmt):
     return target if isinstance(target, exp.Table) else None
 
 
-def _write_entries(stmt, kind: str) -> set[tuple[str, str, str]]:
-    """Alvo recebe write; demais tabelas (JOINs, USING, subqueries) recebem read."""
+def _write_entries(stmt, kind: str) -> set[tuple[str, str, str, str]]:
+    """Alvo recebe write; demais tabelas (JOINs, USING, subqueries) recebem read.
+
+    Cada entrada é ``(tabela, operação, tipo, schema)``; ``schema`` vem vazio quando
+    a tabela não é qualificada.
+    """
     target = _target_table(stmt)
     tables = list(stmt.find_all(exp.Table))
-    entries: set[tuple[str, str, str]] = set()
+    entries: set[tuple[str, str, str, str]] = set()
 
     if target is None:
         for table in tables:
-            entries.add((table.name, "read", kind))
+            entries.add((table.name, "read", kind, table.db))
         return entries
 
     target_name = target.name
@@ -265,22 +303,22 @@ def _write_entries(stmt, kind: str) -> set[tuple[str, str, str]]:
             # Referência ao alias em DELETE/UPDATE multi-tabela (ex.: "DELETE a FROM tb_a a").
             continue
         if table is target:
-            entries.add((table.name, "write", kind))
+            entries.add((table.name, "write", kind, table.db))
         elif alias_matches:
             # DELETE/UPDATE multi-tabela apontando para um alias.
             if table in alias_matches:
-                entries.add((table.name, "write", kind))
+                entries.add((table.name, "write", kind, table.db))
             elif not (table.name == target_name and table.alias_or_name == target_name):
-                entries.add((table.name, "read", kind))
+                entries.add((table.name, "read", kind, table.db))
         else:
-            entries.add((table.name, "read", kind))
+            entries.add((table.name, "read", kind, table.db))
 
     if not alias_matches:
-        entries.add((target_name, "write", kind))
+        entries.add((target_name, "write", kind, target.db))
     return entries
 
 
-def _analyze_heuristic(sql: str) -> set[tuple[str, str, str]]:
+def _analyze_heuristic(sql: str) -> set[tuple[str, str, str, str]]:
     upper = sql.upper()
     if "DELETE" in upper:
         kind = "DELETE"
@@ -293,8 +331,8 @@ def _analyze_heuristic(sql: str) -> set[tuple[str, str, str]]:
     else:
         kind = "SELECT"
 
-    entries: set[tuple[str, str, str]] = set()
-    for keyword, table in _TABLE_REF_RE.findall(sql):
+    entries: set[tuple[str, str, str, str]] = set()
+    for keyword, schema, table in _TABLE_REF_RE.findall(sql):
         keyword = keyword.upper()
         if keyword in ("INTO", "UPDATE"):
             operation = "write"
@@ -302,8 +340,31 @@ def _analyze_heuristic(sql: str) -> set[tuple[str, str, str]]:
             operation = "write"
         else:
             operation = "read"
-        entries.add((table, operation, kind))
+        entries.add((table, operation, kind, schema))
     return entries
+
+
+def _mask_schema_refs(sql: str) -> tuple[str, dict[str, str]]:
+    """Troca o schema interpolado por um identificador sentinela.
+
+    Devolve o SQL mascarado e o mapa ``sentinela -> expressão PHP`` (sem chaves).
+    """
+    refs: dict[str, str] = {}
+
+    def replace(match):
+        expression = match.group(3)
+        if expression.startswith("{"):
+            expression = expression[1:-1]
+        expression = expression.strip()
+        sentinel = "__php_" + re.sub(r"\W+", "_", expression).strip("_") + "__"
+        refs[sentinel] = expression
+        return f"{match.group(1)}{match.group(2)}{sentinel}."
+
+    return _SCHEMA_PREFIX_RE.sub(replace, sql), refs
+
+
+def _unmask_schema(entries, refs: dict[str, str]) -> list[tuple[str, str, str, str]]:
+    return sorted((table, op, kind, refs.get(schema, schema)) for table, op, kind, schema in entries)
 
 
 @lru_cache(maxsize=1024)
@@ -319,13 +380,19 @@ def _parse_cached(sql: str, dialect: str):
 
 def _analyze_sql(
     sql: str, dialect: str = "mysql"
-) -> tuple[list[tuple[str, str, str]], str, tuple | None]:
-    """Devolve (entradas, confiança, statements), com confiança parsed | heuristic."""
+) -> tuple[list[tuple[str, str, str, str]], str, tuple | None]:
+    """Devolve (entradas, confiança, statements), com confiança parsed | heuristic.
+
+    Cada entrada é ``(tabela, operação, tipo, schema)``. O schema é o nome literal
+    (``db.tabela``), a expressão PHP que começa com ``$`` (``{$this->base}.tabela``
+    → ``$this->base``) ou vazio quando a tabela não é qualificada.
+    """
+    sql, refs = _mask_schema_refs(sql)
     statements = _parse_cached(sql, dialect)
     if statements is None:
-        return sorted(_analyze_heuristic(sql)), "heuristic", None
+        return _unmask_schema(_analyze_heuristic(sql), refs), "heuristic", None
 
-    entries: set[tuple[str, str, str]] = set()
+    entries: set[tuple[str, str, str, str]] = set()
     confidence = "parsed"
 
     for stmt in statements:
@@ -338,7 +405,7 @@ def _analyze_sql(
             confidence = "heuristic"
         elif isinstance(stmt, exp.Select):
             for table in stmt.find_all(exp.Table):
-                entries.add((table.name, "read", "SELECT"))
+                entries.add((table.name, "read", "SELECT", table.db))
         elif isinstance(stmt, exp.Insert):
             entries |= _write_entries(stmt, "INSERT")
         elif isinstance(stmt, exp.Update):
@@ -347,14 +414,14 @@ def _analyze_sql(
             entries |= _write_entries(stmt, "DELETE")
         else:
             for table in stmt.find_all(exp.Table):
-                entries.add((table.name, "read", "OTHER"))
+                entries.add((table.name, "read", "OTHER", table.db))
 
     if not entries:
         entries |= _analyze_heuristic(sql)
         if entries:
             confidence = "heuristic"
 
-    return sorted(entries), confidence, statements
+    return _unmask_schema(entries, refs), confidence, statements
 
 
 # ---------------------------------------------------------------------------
@@ -490,11 +557,13 @@ def _flat(text: str | None, limit: int = 160) -> str:
 
 def _link_bullet(link: dict) -> str:
     symbol = f" em `{link['symbol']}`" if link.get("symbol") else ""
+    schema = link.get("schema") or link.get("schema_ref")
+    schema_text = f" [schema: `{schema}`]" if schema else ""
     snippet = _flat(link.get("snippet"))
     suffix = f" — {snippet}" if snippet else ""
     return (
         f"- `{link['file']}:{link['line']}` — **{link['statement_kind']}** "
-        f"({link['operation']}){symbol}{suffix}"
+        f"({link['operation']}){symbol}{schema_text}{suffix}"
     )
 
 
@@ -720,23 +789,26 @@ def handle(ctx, params):
                 entries, confidence, statements = _analyze_sql(sql, profile.db_dialect)
                 symbol = _resolve_symbol(symbols, rel, line)
 
-                for table, operation, kind in entries:
+                for table, operation, kind, schema in entries:
                     if not _valid_table(table):
                         continue
                     if only_table and table != only_table:
                         continue
-                    links.append(
-                        {
-                            "file": rel,
-                            "line": line,
-                            "symbol": symbol,
-                            "table": table,
-                            "operation": operation,
-                            "statement_kind": kind,
-                            "confidence": confidence,
-                            "snippet": sql.strip()[:200],
-                        }
-                    )
+                    link = {
+                        "file": rel,
+                        "line": line,
+                        "symbol": symbol,
+                        "table": table,
+                        "operation": operation,
+                        "statement_kind": kind,
+                        "confidence": confidence,
+                        "snippet": sql.strip()[:200],
+                    }
+                    if schema and schema.startswith("$"):
+                        link["schema_ref"] = schema
+                    elif schema:
+                        link["schema"] = schema
+                    links.append(link)
 
                 for suggestion in _infer_fks(statements, pk_map):
                     if not _valid_table(suggestion["table"]):

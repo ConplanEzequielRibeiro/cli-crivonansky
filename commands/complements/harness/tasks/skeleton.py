@@ -53,12 +53,17 @@ INDEX_TOP_TABLES = 40
 MAP_PARTS_DIR = "map"
 LEVELS = ("index", "map", "dir", "part")
 # Versão do ``project.json``: invalida o cache incremental quando o parser muda.
-PROJECT_VERSION = 3
+PROJECT_VERSION = 4
 # Acima disso o arquivo não é parseado em busca de símbolos.
 MAX_PARSE_BYTES = 2 * 1024 * 1024
 
+# Qualificador de schema antes da tabela: literal (``db.tabela``) ou interpolado
+# pelo PHP (``{$this->base}.tabela``, ``$this->base.tabela``, ``$base.tabela``).
+_SCHEMA_QUALIFIER = (
+    r"(?:\{\$[^{}\r\n]*\}|\$[A-Za-z_]\w*(?:->\w+)*|[`\"']?[A-Za-z_][\w$]*[`\"']?)\s*\.\s*"
+)
 TABLE_RE = re.compile(
-    r"\b(?:FROM|JOIN|INTO|UPDATE|REPLACE\s+INTO)\s+[`\"']?([A-Za-z_][\w$]*)",
+    r"\b(?:FROM|JOIN|INTO|UPDATE|REPLACE\s+INTO)\s+(?:" + _SCHEMA_QUALIFIER + r")?[`\"']?([A-Za-z_][\w$]*)",
     re.IGNORECASE,
 )
 _SQL_WORDS = {

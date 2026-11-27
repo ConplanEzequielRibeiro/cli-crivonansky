@@ -104,3 +104,37 @@ def test_detect_anchor(tmp_path):
     assert briefing.detect_anchor(ctx, "onde uso tb_veiculos?") == {"table": "tb_veiculos"}
     assert briefing.detect_anchor(ctx, "o que faz salvar?") == {"symbol": "salvar"}
     assert briefing.detect_anchor(ctx, "assunto sem relação") is None
+
+
+def test_brief_table_lists_every_line_of_a_file_that_also_writes(tmp_path):
+    ctx = _ctx(tmp_path)
+    (tmp_path / "repo" / "cadastro" / "painel.php").write_text(
+        "<?php\n"
+        "function total() {\n"
+        '  return "SELECT COUNT(*) FROM tb_veiculos";\n'
+        "}\n"
+        "function listar() {\n"
+        '  return "SELECT id FROM tb_veiculos WHERE 1";\n'
+        "}\n"
+        "function tratar() {\n"
+        '  return "UPDATE tb_veiculos SET st=1 WHERE id=1";\n'
+        "}\n",
+        encoding="utf-8",
+    )
+    assert links.handle(ctx, {}).success
+
+    packet = briefing.build(ctx, {"table": "tb_veiculos"})
+
+    items = [item for item in packet["read_first"] if item["path"] == "cadastro/painel.php"]
+    assert len(items) == 1
+    item = items[0]
+    assert item["reason"] == "escreve em tb_veiculos"
+    assert item["line_start"] == 9
+    assert [(span["reason"], span["line_start"]) for span in item["also"]] == [
+        ("lê tb_veiculos", 3),
+        ("lê tb_veiculos", 6),
+    ]
+    assert "also" not in next(i for i in packet["read_first"] if i["path"] == "cadastro/b.php")
+
+    text = briefing.render(packet)
+    assert "`cadastro/painel.php:9-9` — escreve em tb_veiculos (+ lê tb_veiculos: L3, L6)" in text

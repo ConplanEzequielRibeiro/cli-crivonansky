@@ -277,3 +277,26 @@ def test_skeleton_disabling_split_removes_old_parts(tmp_path):
 
     parts = list((tmp_path / "ws" / "knowledge" / "skeleton" / "map").glob("*.md"))
     assert parts == []
+
+
+def test_skeleton_tables_ignore_schema_qualifier(tmp_path):
+    ctx = _context(tmp_path)
+    (tmp_path / "repo" / "cadastro" / "painel.php").write_text(
+        "<?php\n"
+        '$a = "SELECT * FROM {$this->base}.denuncias d";\n'
+        '$b = "UPDATE $this->base.denuncias SET status=1";\n'
+        '$c = "SELECT codigo FROM conplan_sgg_clientes.base WHERE 1";\n',
+        encoding="utf-8",
+    )
+
+    skeleton.handle(ctx, {})
+
+    project = json.loads(
+        (tmp_path / "ws" / "knowledge" / "skeleton" / "project.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert project["tables"]["denuncias"] == ["cadastro/painel.php"]
+    assert project["tables"]["base"] == ["cadastro/painel.php"]
+    assert "conplan_sgg_clientes" not in project["tables"]
+    assert "{" not in "".join(project["tables"])
