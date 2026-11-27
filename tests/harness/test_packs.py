@@ -7,6 +7,9 @@ assinatura ou de dono sem uma atualização explícita. A R0.2 removeu as três 
 
 from collections import Counter
 
+import pytest
+
+from commands.complements.harness import packs
 from commands.complements.harness.catalog import all_tasks, load_tasks
 
 # Snapshot limpo no import do módulo: os testes de engine registram tarefas
@@ -148,3 +151,25 @@ def test_target_pack_distribution():
         "harness_clean": 2,
         "core": 2,
     }
+
+
+def test_manifest_owner_map_matches_frozen_owner():
+    assert packs.owner_map() == OWNER
+
+
+def test_task_spec_pack_matches_owner():
+    for name, spec in _catalog().items():
+        assert spec.pack == OWNER[name], name
+
+
+def test_owner_of_representative_tasks():
+    assert packs.owner_of("shell:run") == "harness_exec"
+    assert packs.owner_of("env:check") == "core"
+    assert packs.owner_of("code:search") == "harness"
+    assert packs.owner_of("patch:apply") == "harness_patch"
+    assert packs.owner_of("inexistente") is None
+
+
+def test_duplicate_owner_is_rejected():
+    with pytest.raises(ValueError, match="tarefa duplicada: x"):
+        packs.build_owner([("a", ["x"]), ("b", ["x"])])
