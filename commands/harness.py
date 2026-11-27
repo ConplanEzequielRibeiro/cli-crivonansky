@@ -346,6 +346,15 @@ class HarnessCommand(Command):
 
         prompt, usage = asking.fit_sections(question, sections, budget, chars_per_token)
 
+        try:
+            from .complements.harness import manifest
+
+            warn = manifest.warning(manifest.verify(ctx))
+            if warn:
+                prompt = f"> {warn}\n\n{prompt}"
+        except Exception:  # noqa: BLE001 - aviso é complementar
+            pass
+
         from .complements.harness import redact
 
         policy = redact.get_policy(engine.config)

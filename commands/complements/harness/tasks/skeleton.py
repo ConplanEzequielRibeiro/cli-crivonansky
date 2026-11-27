@@ -791,6 +791,33 @@ def handle(ctx, params):
     write_text(map_md, map_text)
     slices = _write_slices(ctx, files_index)
 
+    manifest_path = ""
+    manifest_error = ""
+    try:
+        from .. import manifest as manifest_mod
+
+        manifest_artifacts = {
+            "knowledge/skeleton/project.json": {
+                "files": len(files_index),
+                "loc": data["loc"],
+                "symbols": data["symbols"],
+            },
+            "knowledge/skeleton/SKELETON.md": {},
+            "knowledge/skeleton/MAP.md": {},
+        }
+        for part in part_paths:
+            rel = os.path.relpath(part, workspace(ctx)).replace("\\", "/")
+            manifest_artifacts[rel] = {}
+        manifest_path = manifest_mod.write_manifest(
+            ctx,
+            manifest_artifacts,
+            manifest_mod.inputs_from_index(ctx, files_index),
+            profile.name,
+            int(data.get("version") or 0),
+        )
+    except Exception as exc:  # noqa: BLE001 - manifesto é complementar
+        manifest_error = str(exc)
+
     summary = (
         f"{len(files_index)} arquivo(s), {data['symbols']} símbolo(s), "
         f"{len(tables)} tabela(s) em {elapsed:.1f}s"
@@ -806,6 +833,10 @@ def handle(ctx, params):
         f"SKELETON.md: {skeleton_md} ({len(markdown)} bytes, {symbols_per_file} símbolo(s)/arquivo)",
         map_details,
     ]
+    if manifest_path:
+        details.append(f"manifesto: {manifest_path}")
+    elif manifest_error:
+        details.append(f"manifesto: falha ({manifest_error})")
     if skipped.get("excluded"):
         details.append(f"{skipped['excluded']} arquivo(s) excluído(s) por legacy.exclude/exclude")
     if skipped.get("build_artifacts"):

@@ -768,6 +768,20 @@ def handle(ctx, params):
     write_json(os.path.join(out_dir, "includes.json"), includes)
     write_json(os.path.join(out_dir, "fk-inferred.json"), fks)
 
+    try:
+        from .. import manifest as manifest_mod
+
+        manifest_mod.update(
+            ctx,
+            "knowledge/links/code-db-links.json",
+            os.path.join(out_dir, "code-db-links.json"),
+            tables=len({link["table"] for link in links}),
+            ops=len(links),
+            fks=len(fks),
+        )
+    except Exception:  # noqa: BLE001 - manifesto é complementar
+        pass
+
     write_text(os.path.join(out_dir, "code-db-links.md"), _links_markdown(links))
     write_text(os.path.join(out_dir, "fk-inferred.md"), _fk_markdown(fks))
     write_text(os.path.join(out_dir, "includes.md"), _includes_markdown(includes))

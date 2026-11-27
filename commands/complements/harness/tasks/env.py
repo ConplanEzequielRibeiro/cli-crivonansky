@@ -102,6 +102,22 @@ def handle(ctx, params):
         "(limpe com `clean:artifacts`/`clean:runs`)"
     )
 
+    try:
+        from .. import manifest
+
+        freshness = manifest.verify(ctx)
+        fresh_ok = freshness["status"] in ("fresh", "dirty")
+        add(
+            _line(
+                "frescor",
+                fresh_ok,
+                manifest.describe(freshness).replace("\n", " | "),
+            ),
+            True,
+        )
+    except Exception as exc:  # noqa: BLE001 - diagnóstico complementar
+        lines.append(f"- AVISO: frescor indisponível: {exc}")
+
     plugin_python = get_tool_path(ctx.config, "python")
     if plugin_python and looks_like_path(plugin_python):
         exists = os.path.isfile(plugin_python)
