@@ -86,12 +86,13 @@ commands/complements/
 O `install.ps1` cria o venv do plugin, instala `requirements.txt` e gera
 `workspace/harness.yaml` com caminhos absolutos. O `harness_core/bootstrap.py` adiciona
 o site-packages do plugin ao `sys.path` do crivonansky quando o venv do host não tem as
-dependências. Os módulos antigos em `harness/` são shims que reexportam o core (D1).
+dependências. Os shims antigos foram removidos na D6; imports usam `harness_core` ou o
+pack dono diretamente.
 
 > **Módulos do plugin não podem ter nome de módulo da stdlib.** O plugin já teve um
 > `types.py`, que sombreava o `types` da biblioteca padrão quando a pasta do harness
 > entrava no `sys.path` (subprocessos do pip, execução a partir da pasta) e quebrava
-> a instalação. O arquivo hoje é `task_types.py` e
+> a instalação. O arquivo hoje é `harness_core/task_types.py` e
 > `tests/harness/test_package_layout.py` impede a reincidência.
 
 ## Instalação
@@ -277,6 +278,8 @@ workspace/knowledge/
 | `knowledge:verify` | read | Frescor do mapa/vínculos vs. commit e fontes (`deep`, `fail_on_dirty`, `json`) |
 | `audit:removal` | write | Cria ledger de completude para remoção/migração |
 | `audit:verify` | read | Reexecuta o ledger e falha se sobrarem referências ativas |
+| `graph:stats` | read | Contagens do store SQLite (arquivos, símbolos, operações, FKs) |
+| `graph:export` | write | Exporta o store para JSON/JSONL (debug explícito) |
 | `db:snapshot` | read | Schema do banco (live MySQL/Postgres ou dump do dialeto do perfil) |
 | `db:schema` | read | Markdown de uma tabela |
 | `db:query` | read | SELECT/SHOW/DESCRIBE/EXPLAIN |
@@ -307,7 +310,7 @@ o dono sem importar handlers.
 
 | Pack | Comando | Tarefas |
 |---|---|---|
-| `harness` | `/harness` | `code:*` (6), `db:*` (4), `docs:import`, `rag:*` (3), `context:pack`, `file:read`, `knowledge:verify`, `audit:*` |
+| `harness` | `/harness` | `code:*` (6), `db:*` (4), `docs:import`, `rag:*` (3), `context:pack`, `file:read`, `knowledge:verify`, `audit:*` (2), `graph:*` (2) |
 | `harness_exec` | `/harness-exec` | `shell:run`, `py:run`, `docker:exec`, `logs:tail`, `git:run` |
 | `harness_patch` | `/harness-patch` | `patch:apply` |
 | `harness_validate` | `/harness-validate` | `test:run`, `verify`, `lint` |

@@ -34,7 +34,7 @@
 | `/run-git-cmd` | `commands/run_git_cmd.py` | Runs a `git` command in `--root-dir` (command must start with `git`) |
 | `/docker-container-run` | `commands/docker_container_run.py` | Runs a command inside a Linux Docker container via `docker exec ... sh -c` |
 | `/run` | `commands/run_command.py` | Task runner (gulp.js-style). Subcommands: `run <task>`, `--tasks`, `watch <task>`, `init`. Loads tasks from `runfile.py` via `core/run/` |
-| `/harness` | `commands/harness.py` | Harness de mapeamento: lifecycle + `run/exec/tasks/runs/ask/hooks/env:check`. Usa `commands/complements/harness/` e `harness_core/` |
+| `/harness` | `commands/harness.py` | Mapeamento: `code:*`, `db:*`, `docs:*`, `rag:*`, `code:brief`, `knowledge:verify`, `audit:*`, `graph:*` + lifecycle/ask/hooks. Usa `harness/` e `harness_core/` |
 | `/harness-exec` | `commands/harness_exec.py` | Harness · execução (`shell:run`, `py:run`, `docker:exec`, `logs:tail`, `git:run`) |
 | `/harness-patch` | `commands/harness_patch.py` | Harness · patch (`patch:apply`) com encoding/CRLF/BOM |
 | `/harness-validate` | `commands/harness_validate.py` | Harness · validação (`test:run`, `verify`, `lint`) |
