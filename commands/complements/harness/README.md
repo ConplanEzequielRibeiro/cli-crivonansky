@@ -273,6 +273,7 @@ workspace/knowledge/
 | `env:check` | read | Verifica git, docker, workspace e RAG opcional |
 | `context:pack` | read | Empacota arquivos em Markdown |
 | `file:read` | read | Lê arquivo com números de linha |
+| `knowledge:verify` | read | Frescor do mapa/vínculos vs. commit e fontes (`deep`, `fail_on_dirty`, `json`) |
 | `db:snapshot` | read | Schema do banco (live MySQL/Postgres ou dump do dialeto do perfil) |
 | `db:schema` | read | Markdown de uma tabela |
 | `db:query` | read | SELECT/SHOW/DESCRIBE/EXPLAIN |
@@ -303,7 +304,7 @@ o dono sem importar handlers.
 
 | Pack | Comando | Tarefas |
 |---|---|---|
-| `harness` | `/harness` | `code:*` (5), `db:*` (4), `docs:import`, `rag:*` (3), `context:pack`, `file:read` |
+| `harness` | `/harness` | `code:*` (5), `db:*` (4), `docs:import`, `rag:*` (3), `context:pack`, `file:read`, `knowledge:verify` |
 | `harness_exec` | `/harness-exec` | `shell:run`, `py:run`, `docker:exec`, `logs:tail`, `git:run` |
 | `harness_patch` | `/harness-patch` | `patch:apply` |
 | `harness_validate` | `/harness-validate` | `test:run`, `verify`, `lint` |
@@ -352,6 +353,27 @@ para `code:skeleton` e `db:links`. Toda saída cortada traz `[truncado: N … �
 (`<?php … ?>`), preservando as linhas. Assim símbolos e SQL que vêm depois de `<script>`,
 comentários HTML ou blocos de template não são mais perdidos. Ao mudar o parser, a
 versão do `project.json` é incrementada e o cache incremental é refeito.
+
+## Frescor do mapa
+
+`code:skeleton` e `db:links` gravam `workspace/knowledge/manifest.json` com commit,
+branch, dirty state, hash dos artefatos e das fontes. `knowledge:verify` compara o
+manifesto com o estado atual:
+
+```text
+code:skeleton                          # atualiza o manifesto
+run knowledge:verify                   # fresh | stale | dirty | unknown
+run knowledge:verify --deep            # recalcula hash das fontes
+run knowledge:verify --fail_on_dirty   # falha se o worktree estiver sujo
+run knowledge:verify --json            # saída estruturada
+```
+
+- `fresh`: commit, fontes e artefatos batem.
+- `stale`: commit/arquivo/artefato mudou; rode `code:skeleton` (e `db:links`).
+- `dirty`: mesmo commit, worktree sujo; o mapa pode estar desatualizado.
+- `unknown`: sem manifesto ou sem git.
+
+`env:check` mostra o frescor e `ask` prefixa um aviso quando o mapa está `stale`/`dirty`.
 
 > As notas/fichas (`notes:*`) e o `kb:export` foram removidos (R0); o mapa em
 > `workspace/knowledge/skeleton/` é a fonte de navegação.
