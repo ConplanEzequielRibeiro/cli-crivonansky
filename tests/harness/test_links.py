@@ -382,3 +382,94 @@ def test_concatenated_literal_is_not_reported_twice(tmp_path):
 
     entries = _by_table(_links(tmp_path), "tb_unica")
     assert len(entries) == 1
+
+
+def test_schema_interpolado_pelo_php_nao_esconde_a_tabela(tmp_path):
+    ctx = _context(
+        tmp_path,
+        {
+            "modulo/ordens.php": (
+                "<?php\n"
+                '$a = mysql_query("SELECT o.situacao FROM {$this->db}.tb_ordens d $where");\n'
+                '$b = mysql_query("UPDATE {$this->db}.tb_ordens SET situacao=\'x\' WHERE id=1");\n'
+                '$c = mysql_query("SELECT id FROM $this->db.tb_itens WHERE id=1");\n'
+                '$d = mysql_query("SELECT d.id FROM {$this->db}.tb_ordens d'
+                ' LEFT JOIN {$this->db}.tb_itens c ON c.id = d.id_item");\n'
+            ),
+        },
+    )
+
+    links.handle(ctx, {})
+
+    items = _links(tmp_path)
+    tb_ordens = _by_table(items, "tb_ordens")
+    assert {item["operation"] for item in tb_ordens} == {"read", "write"}
+    assert {item["file"] for item in tb_ordens} == {"modulo/ordens.php"}
+    assert len(_by_table(items, "tb_itens")) == 2
+    assert not [item for item in items if "{" in item["table"] or "$" in item["table"]]
+    assert {item["schema_ref"] for item in tb_ordens} == {"$this->db"}
+    assert not [item for item in tb_ordens if "schema" in item]
+
+
+def test_propriedades_da_classe_resolvem_tabela_e_schema(tmp_path):
+    ctx = _context(
+        tmp_path,
+        {
+            "modulo.php": (
+                "<?php\n"
+                "class Modulo {\n"
+                "    private $tabela = 'tb_ordens';\n"
+                "    private $prefixo = 'tb_';\n"
+                "    private $banco = 'schema_a';\n"
+                "    private $db = '';\n"
+                "    private $mutavel = 'a';\n"
+                "    function __construct() {\n"
+                "        $this->db = $_SESSION['db'];\n"
+                "        $this->mutavel = $_SESSION['t'];\n"
+                "    }\n"
+                "    function a() {\n"
+                '        return mysql_query("SELECT id FROM {$this->db}.{$this->tabela} WHERE 1");\n'
+                "    }\n"
+                "    function b() {\n"
+                '        return mysql_query("SELECT id FROM " . $this->db . "." . $this->tabela . " WHERE 1");\n'
+                "    }\n"
+                "    function c() {\n"
+                '        return mysql_query("UPDATE {$this->banco}.{$this->prefixo}log SET a=1");\n'
+                "    }\n"
+                "    function d() {\n"
+                '        return mysql_query("SELECT id FROM {$this->mutavel} WHERE 1");\n'
+                "    }\n"
+                "}\n"
+            ),
+        },
+    )
+
+    links.handle(ctx, {})
+
+    items = _links(tmp_path)
+    tb_ordens = _by_table(items, "tb_ordens")
+    assert len(tb_ordens) == 2
+    assert {item["schema_ref"] for item in tb_ordens} == {"$this->db"}
+
+    log = _by_table(items, "tb_log")
+    assert len(log) == 1
+    assert log[0]["operation"] == "write"
+    assert log[0]["schema"] == "schema_a"
+    assert "schema_ref" not in log[0]
+
+    # Propriedade reatribuída com valor dinâmico fica ambígua: nenhuma tabela inventada.
+    assert not [item for item in items if item["file"] == "modulo.php" and "{" in item["table"]]
+    assert not _by_table(items, "a")
+
+
+def test_schema_literal_aparece_no_markdown(tmp_path):
+    ctx = _context(
+        tmp_path,
+        {"config.php": '<?php\n$r = mysql_query("SELECT chave FROM schema_a.tb_config LIMIT 1");\n'},
+    )
+
+    links.handle(ctx, {})
+
+    item = _by_table(_links(tmp_path), "tb_config")[0]
+    assert item["schema"] == "schema_a"
+    assert "[schema: `schema_a`]" in links._link_bullet(item)

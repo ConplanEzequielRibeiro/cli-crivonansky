@@ -88,21 +88,65 @@ def _file_entry(row, reason, score):
     }
 
 
+# Trechos adicionais por arquivo (``also``) exibidos no brief; o excedente vira contagem.
+ALSO_MAX = 10
+
+
+def _finish_also(item: dict) -> None:
+    """Normaliza ``also``: sem repetidos, sem o trecho principal, escritas primeiro."""
+    main = (item["line_start"], item["line_end"])
+    seen = set()
+    spans = []
+    for span in item.pop("also", None) or []:
+        key = (span["line_start"], span["line_end"], span["reason"])
+        if key in seen or (key[0], key[1]) == main:
+            continue
+        seen.add(key)
+        spans.append(span)
+    spans.sort(key=lambda span: (not span["reason"].startswith("escreve"), span["line_start"]))
+    if spans:
+        item["also"] = spans[:ALSO_MAX]
+        if len(spans) > ALSO_MAX:
+            item["also_omitted"] = len(spans) - ALSO_MAX
+
+
 def _read_first(conn, anchor, rows, max_paths):
     candidates: dict[str, dict] = {}
 
-    def add(path, reason, score, line_start=1, line_end=None):
+    def add(path, reason, score, line_start=1, line_end=None, merge=False):
+        """Mantém uma entrada por arquivo (a de maior prioridade).
+
+        Com ``merge``, os demais trechos do mesmo arquivo (ex.: leituras de um
+        arquivo que também escreve na tabela) ficam em ``also`` em vez de sumir.
+        """
         if not path:
             return
+        entry = {
+            "path": path,
+            "line_start": line_start,
+            "line_end": line_end or 1,
+            "reason": reason,
+            "score": score,
+            "also": [],
+        }
         current = candidates.get(path)
-        if current is None or score > current["score"]:
-            candidates[path] = {
-                "path": path,
-                "line_start": line_start,
-                "line_end": line_end or 1,
-                "reason": reason,
-                "score": score,
-            }
+        if current is None:
+            candidates[path] = entry
+            return
+        if score > current["score"]:
+            entry["also"] = current["also"]
+            winner, loser = entry, current
+            candidates[path] = entry
+        else:
+            winner, loser = current, entry
+        if merge:
+            winner["also"].append(
+                {
+                    "line_start": loser["line_start"],
+                    "line_end": loser["line_end"],
+                    "reason": loser["reason"],
+                }
+            )
 
     kind = anchor["type"]
     if kind == "path":
@@ -124,9 +168,9 @@ def _read_first(conn, anchor, rows, max_paths):
         writes = [op for op in rows if op.get("access") == "write"]
         reads = [op for op in rows if op.get("access") != "write"]
         for op in writes:
-            add(op["file_path"], f"escreve em {op['table_name']}", 90, op["line"], op["line"])
+            add(op["file_path"], f"escreve em {op['table_name']}", 90, op["line"], op["line"], merge=True)
         for op in reads:
-            add(op["file_path"], f"lê {op['table_name']}", 70, op["line"], op["line"])
+            add(op["file_path"], f"lê {op['table_name']}", 70, op["line"], op["line"], merge=True)
         for fk in _rows(conn, "SELECT * FROM fk_inferred WHERE from_table=? OR to_table=?", (anchor["value"], anchor["value"])):
             other = fk["to_table"] if fk["from_table"] == anchor["value"] else fk["from_table"]
             for op in _rows(conn, "SELECT * FROM table_ops WHERE table_name=?", (other,))[:3]:
@@ -147,6 +191,7 @@ def _read_first(conn, anchor, rows, max_paths):
     omitted = max(len(ordered) - max_paths, 0)
     for item in ordered:
         item.pop("score", None)
+        _finish_also(item)
     return ordered[:max_paths], omitted
 
 
@@ -181,6 +226,22 @@ def _impact(conn, anchor, max_tables):
     return tables
 
 
+def _also_text(item: dict) -> str:
+    """Resumo dos demais trechos do arquivo: `` (+ lê tabela: L637, L650)``."""
+    groups: dict[str, list[str]] = {}
+    for span in item.get("also") or []:
+        start, end = span["line_start"], span["line_end"]
+        label = f"L{start}" if start == end else f"L{start}-{end}"
+        groups.setdefault(span["reason"], []).append(label)
+    if not groups:
+        return ""
+    parts = [f"{reason}: {', '.join(labels)}" for reason, labels in groups.items()]
+    omitted = int(item.get("also_omitted") or 0)
+    if omitted:
+        parts.append(f"+{omitted} omitido(s)")
+    return f" (+ {'; '.join(parts)})"
+
+
 def _render(packet: dict) -> str:
     anchor = packet["anchor"]
     freshness = packet["freshness"]
@@ -198,7 +259,8 @@ def _render(packet: dict) -> str:
     if packet["read_first"]:
         for item in packet["read_first"]:
             lines.append(
-                f"- `{item['path']}:{item['line_start']}-{item['line_end']}` — {item['reason']}"
+                f"- `{item['path']}:{item['line_start']}-{item['line_end']}` — "
+                f"{item['reason']}{_also_text(item)}"
             )
     else:
         lines.append("- (nada resolvido; rode `code:skeleton`/`db:links`)")
