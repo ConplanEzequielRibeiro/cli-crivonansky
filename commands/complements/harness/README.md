@@ -285,6 +285,23 @@ workspace/knowledge/
 | `test:run` / `verify` / `lint` | read | Pipelines do `harness.yaml` |
 | `prompt` | read | Prompt do LLM no clipboard |
 
+## Donos das tarefas (packs)
+
+Cada tarefa tem um único dono; o comando correspondente é o que a executa. Os
+manifestos ficam em `commands/complements/<pack>/pack.py` e `harness/packs.py` resolve
+o dono sem importar handlers.
+
+| Pack | Comando | Tarefas |
+|---|---|---|
+| `harness` | `/harness` | `code:*` (5), `db:*` (4), `docs:import`, `rag:*` (3), `context:pack`, `file:read` |
+| `harness_exec` | `/harness-exec` | `shell:run`, `py:run`, `docker:exec`, `logs:tail`, `git:run` |
+| `harness_patch` | `/harness-patch` | `patch:apply` |
+| `harness_validate` | `/harness-validate` | `test:run`, `verify`, `lint` |
+| `harness_state` | `/harness-state` | `state:save`, `state:load`, `state:list` |
+| `harness_watch` | `/harness-watch` | `watch:clip`, `watch:downloads` |
+| `harness_clean` | `/harness-clean` | `clean:artifacts`, `clean:runs` |
+| `core` | todos | `env:check`, `prompt` |
+
 Tarefas `write` pedem confirmação. Blocos vindos do LLM nunca aceitam `--yes` e **não
 executam** `shell:run`, `py:run` e `docker:exec` (só o usuário, pela linha de comando;
 configurável em `policy.llm_denied_tasks` / `policy.llm_allowed_tasks`). Na TUI a
