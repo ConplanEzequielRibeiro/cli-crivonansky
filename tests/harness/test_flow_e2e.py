@@ -5,6 +5,7 @@ import yaml
 from commands.complements.harness.catalog import load_tasks
 from commands.complements.harness.engine import HarnessEngine
 from commands.harness import HarnessCommand
+from commands.harness_state import HarnessStateCommand
 
 STATE_BLOCK = """```crivonansky-state
 tarefa: ajuste-veiculo
@@ -55,12 +56,13 @@ def test_full_flow(tmp_path, capsys, monkeypatch):
     assert error is None and results[0]["status"] == "success"
     assert "Ação" in results[0]["text"]
 
-    # 3. state save pelo atalho (confirmação y), depois state load
+    # 3. state save pelo atalho (confirmação y), depois state load (D3: comando próprio)
+    state_cmd = HarnessStateCommand()
     monkeypatch.setattr("builtins.input", lambda *_: "y")
-    ok, _ = cmd.execute(["state", "save", "--content", STATE_BLOCK, "--config", config_path])
+    ok, _ = state_cmd.execute(["save", "--content", STATE_BLOCK, "--config", config_path])
     assert ok
     capsys.readouterr()
-    ok, _ = cmd.execute(["state", "load", "--last", "--config", config_path])
+    ok, _ = state_cmd.execute(["load", "--last", "--config", config_path])
     out = capsys.readouterr().out
     assert ok
     assert "propor o patch de salvar_veiculo" in out and "validar placa" in out

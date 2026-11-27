@@ -9,7 +9,8 @@ from .complements.harness import ops
 
 class HarnessCommand(Command):
     name = "harness"
-    description = "Executa o harness de desenvolvimento assistido"
+    description = "Harness · mapeamento (código, banco, docs/RAG)"
+    pack = "harness"
     help_text = """Uso:
   /harness install [--force] [--skip-docker] [--check-only] [--python CAMINHO] [--with-rag]
   /harness start [--rag] [--no-docker]
@@ -22,17 +23,14 @@ class HarnessCommand(Command):
       ex.: run code:skeleton --level map | run code:skeleton --level dir --path cadastro
            run code:skeleton --param split_map=true          (mapa completo em partes)
            run code:skeleton --level part --part 2            (uma parte do mapa)
-           run patch:apply --file F --branch ajuste   (preserva encoding/CRLF)
   /harness ask "<pergunta>" [--context map,db,code,docs,rag,skeleton] [--budget TOKENS] [--no-clipboard]
-  /harness state save --clip | list | load [--last | NOME]   (retomar tarefa em outra conversa)
-  /harness watch clip [--stop] | watch downloads [--path P] [--stop]
-  /harness clean artifacts [--scope skeleton,db,links,docs,legacy-code] [--param dry_run=true]
-  /harness clean runs [--days 30] [--keep 100] [--param dry_run=true]
   /harness prompt
   /harness tasks
   /harness runs [--last N]
   /harness hooks install|uninstall|status
   /harness env:check
+  Outros domínios: /harness-exec, /harness-patch, /harness-validate,
+                   /harness-state, /harness-watch, /harness-clean
   (opção global: --config CAMINHO)"""
 
     # ------------------------------------------------------------------
@@ -112,6 +110,12 @@ class HarnessCommand(Command):
                     config_path_arg=config_path,
                 )
             )
+
+        if sub in ("exec", "run", "tasks", "runs", "prompt", "env:check"):
+            from .complements.harness_core import cli
+
+            forwarded = (["--config", config_path] if config_path else []) + [sub, *rest]
+            return cli.execute("harness", forwarded)
 
         try:
             self._ensure_runtime()
