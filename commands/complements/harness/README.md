@@ -283,7 +283,7 @@ workspace/knowledge/
 | `db:snapshot` | read | Schema do banco (live MySQL/Postgres ou dump do dialeto do perfil) |
 | `db:schema` | read | Markdown de uma tabela |
 | `db:query` | read | SELECT/SHOW/DESCRIBE/EXPLAIN |
-| `db:links` | read | SQL embutido + FKs inferidas + includes/imports + visões `tables/*.md` (segue o perfil de stack) |
+| `db:links` | read | SQL embutido + FKs inferidas + includes/imports + visões `tables/*.md`; aceita schema literal/interpolado (segue o perfil de stack) |
 | `docs:import` | read | Manuais e tickets |
 | `rag:serve` | read | Inicia/para/consulta a API local do RAG (opcional) |
 | `rag:sync` | read | Publica a camada semântica no RAG e ingere |
@@ -360,6 +360,31 @@ para `code:skeleton` e `db:links`. Toda saída cortada traz `[truncado: N … �
 comentários HTML ou blocos de template não são mais perdidos. Ao mudar o parser, a
 versão do `project.json` é incrementada e o cache incremental é refeito.
 
+## SQL embutido (`db:links`)
+
+Cada ocorrência vira um vínculo com arquivo, linha, `table`, `operation`
+(`read`/`write`), `statement_kind`, `confidence` (`parsed`/`heuristic`) e o `symbol` que
+contém a linha (resolvido pelo esqueleto). Regras de resolução relevantes:
+
+- **Schema qualificado.** Aceita literal (`schema_a.tb_config`) e interpolado pelo PHP
+  (`{$this->db}.tb_ordens`, `$this->db.tb_itens`, `$base.tb_x`). Antes do parse o
+  qualificador é trocado por um identificador sentinela e, depois, devolvido no vínculo
+  como `schema` (nome literal) ou `schema_ref` (expressão PHP, ex. `$this->db`). A tabela
+  nunca é confundida com o schema nem desaparece.
+- **Propriedades de classe.** `private $tabela = 'tb_ordens';` resolve
+  `{$this->tabela}`; prefixo também vale (`private $prefixo = 'tb_';` +
+  `{$this->prefixo}log` → `tb_log`). Propriedade reatribuída em runtime
+  (`$this->db = $_SESSION['db']`) fica ambígua e nada é inventado.
+- **Concatenação.** Heredoc/nowdoc e concatenações com literal são analisadas; uma
+  concatenação só de variáveis (`"{$a}.{$b}"`) não é SQL e não bloqueia a string que a
+  contém.
+- **Esqueleto.** O `code:skeleton` usa a mesma regra: o `project.json` lista a tabela
+  **sem** o qualificador (antes, `schema_a.tb_config` virava a pseudo-tabela `schema_a`).
+
+O Markdown mostra o qualificador como ``[schema: `schema_a`]``. `db:links` precisa ser
+reexecutado para preencher `schema`/`schema_ref` em mapas antigos; `graph.sqlite`
+(`table_ops`) não guarda o schema, então não há migração do banco.
+
 ## Frescor do mapa
 
 `code:skeleton` e `db:links` gravam `workspace/knowledge/manifest.json` com commit,
@@ -412,6 +437,18 @@ primeiro, impacto (tabelas/escritas/leituras/FKs), pipelines de validação, ach
 omissões e o próximo comando. O budget (padrão 6.000 tokens, teto 12.000) corta a
 lista e registra o que ficou de fora; `--json` devolve o mesmo pacote.
 
+**Um item por arquivo.** "Ler primeiro" mostra cada arquivo uma única vez, com o trecho
+de maior prioridade (escritas antes de leituras). As demais ocorrências ficam em `also`
+e o render resume na própria linha, até `ALSO_MAX` (10) trechos; o excedente vira
+`also_omitted`:
+
+```text
+- `cadastro/relatorio.php:9-9` — escreve em tb_veiculos (+ lê tb_veiculos: L3, L6)
+```
+
+O resumo dos `also` entra no cálculo de tokens, e antes um arquivo que escrevia escondia
+as leituras da mesma tabela.
+
 ## Auditoria de remoção
 
 ```text
@@ -436,7 +473,8 @@ O runner usa 5 tarefas-ouro da fixture (tabelas `tb_alugueis`, `tb_veiculos`,
 `tb_clientes`, `tb_categorias`, `tb_pagamentos`) e grava
 `workspace/runs/evals/brief-*.json` com `first_correct_file@1`, `recall@5`,
 leituras irrelevantes, validação perdida, tokens e truncamentos. Resultado atual:
-**5/5 no primeiro arquivo, recall 1.0, 671 tokens**.
+**5/5 no primeiro arquivo, recall 1.0, 686 tokens** (inclui os resumos de `also`;
+antes do PR #3 eram 671).
 
 ## Benchmark
 
