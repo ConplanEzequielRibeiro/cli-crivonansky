@@ -9,7 +9,7 @@
 
 ## Architecture
 
-- **`core/`** — framework: `Command` (ABC), `CommandRegistry`, `CLIContext`, `CommandParser` (uses `shlex`), `CommandExecutor` (captures stdout via `io.StringIO`), `load_commands` (dynamic import via `importlib`).
+- **`core/`** — framework: `Command` (ABC), `CommandRegistry`, `CLIContext`, `CommandParser` (uses `shlex`), `CommandExecutor` (captures stdout via `io.StringIO`), `load_commands` (dynamic import via `importlib`), and `result_block` (the `crivonansky-result` envelope + clipboard used by `/help`).
 - **`core/run/`** — task runner subsystem (gulp.js-style). `task`, `src`, `dest`, `series`, `parallel`, `watch`, `cmd`. Loads `runfile.py` dynamically. See dedicated section below.
 - **`commands/`** — plugins auto-discovered by `loader.py`. Any `.py` file with a class inheriting `Command` is loaded.
 - **`commands/complements/`** — internal dependencies of plugins (not auto-discovered). Sub-packages: `task_plugin/`, `db_tools_plugin/`, `load_app_plugin/` (includes `VirtualDesktop11.exe` binary), and `harness/` (self-contained harness plugin with its own `.venv`, `vendor/`, `workspace/` and `fixture/`).
@@ -20,7 +20,7 @@
 
 | Command | File | Notes |
 |---|---|---|
-| `/help` | `commands/help.py` | Lists all registered commands |
+| `/help` | `commands/help.py` | Lists commands with each plugin `help_text` inside a `crivonansky-result` block (copied to clipboard) |
 | `/task` | `commands/task.py` | Opens new PowerShell window. Subcommands: `start`, `resume`, `report`. Uses `commands/complements/task_plugin/` |
 | `/environment` | `commands/environment.py` | Docker compose management. Reads `environment_conf.json`; `/environment init [--force]` creates a sample config |
 | `/metrics-report` | `commands/metrics_report.py` | Trimester metrics. Reads `metrics_report_conf.json`. Uses `commands/complements/work_analysis.py` |

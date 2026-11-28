@@ -76,7 +76,7 @@ Opções: `--host` (default `127.0.0.1`), `--port` (default `8000`), `--reload` 
 
 | Comando | Descrição |
 |---|---|
-| `/help` | Lista todos os comandos disponíveis |
+| `/help` | Lista os comandos com o texto de ajuda de cada plugin (bloco `crivonansky-result`, copiado para o clipboard) |
 | `/clear` | Limpa a tela |
 | `/quit` | Sai da aplicação |
 | `/task` | Controle de tarefas (start/resume/report) |
@@ -334,6 +334,10 @@ O Crivonansky expõe uma API REST (FastAPI) que executa os mesmos comandos da TU
 | `GET /commands/{name}` | Detalhe + uso/ajuda do comando (aceita com ou sem `/` inicial) |
 | `POST /execute` | Executa uma linha de comando |
 
+`/help` monta a lista de comandos com o texto de ajuda de cada plugin e devolve no mesmo
+envelope das tarefas do harness (bloco `crivonansky-result`), copiado para o clipboard.
+Sem clipboard disponível o bloco continua sendo impresso normalmente.
+
 ### Executando comandos
 
 `POST /execute` recebe `{"command": "/environment start dev"}` e retorna `{success, output, data, error}`:
@@ -347,8 +351,8 @@ curl -X POST http://127.0.0.1:8000/execute \
 ```json
 {
   "success": true,
-  "output": "Comandos disponíveis:\n\n/help - Lista comandos disponíveis\n...",
-  "data": {"count": 11},
+  "output": "```crivonansky-result\nharness: 1\nid: c-1a2b3c4d\ntask: help\nstatus: success\n...\n  Comandos disponíveis (21):\n...",
+  "data": {"count": 21, "clipboard": true},
   "error": null
 }
 ```
