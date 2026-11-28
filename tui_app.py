@@ -1,7 +1,7 @@
 """TUI do Crivonansky (Textual).
 
 Layout: cabeçalho, painel de saída com quebra de linha, barra de busca,
-prompt de comando, dropdown de comandos e barra de status.
+prompt de comando com quebra de linha, dropdown de comandos e barra de status.
 
 Atalhos:
     Ctrl+L  limpa o log
@@ -28,25 +28,65 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, ListItem, ListView, Static
+from textual.widgets import Button, Input, Label, ListItem, ListView, Static, TextArea
 
 from tui_log import WrappingRichLog
 from tui_logo import banner
 
 
-class PromptInput(Input):
-    """Input de comando: Tab completa o item destacado no dropdown.
+class PromptInput(TextArea):
+    """Barra de comando multilinha com quebra automática de linha.
 
-    O ``Input`` não trata Tab; sem isso o binding de ``focus_next`` da Screen
-    consumiria a tecla antes do app.
+    Enter envia o comando (sem inserir nova linha), Tab completa o item
+    destacado no dropdown e as setas ↑/↓ percorrem o histórico — do último
+    comando digitado para o primeiro. Com o dropdown aberto, elas percorrem a
+    lista de sugestões.
     """
 
-    def on_key(self, event) -> None:
-        if event.key != "tab":
-            return
-        complete = getattr(self.app, "complete_from_dropdown", None)
-        if complete is not None and complete():
+    BINDINGS = [
+        Binding("up", "history_previous", "Histórico", show=False),
+        Binding("down", "history_next", "Histórico", show=False),
+    ]
+
+    def __init__(self, **kwargs) -> None:
+        kwargs.setdefault("soft_wrap", True)
+        kwargs.setdefault("tab_behavior", "focus")
+        kwargs.setdefault("highlight_cursor_line", False)
+        super().__init__(**kwargs)
+
+    async def _on_key(self, event) -> None:
+        if event.key == "enter":
+            # Enter envia o comando; a quebra de linha da barra é apenas visual
+            # (soft wrap), então o texto permanece em uma linha lógica.
             event.stop()
+            event.prevent_default()
+            submit = getattr(self.app, "submit_command", None)
+            if submit is not None:
+                submit()
+            return
+
+        if event.key == "tab":
+            complete = getattr(self.app, "complete_from_dropdown", None)
+            if complete is not None and complete():
+                event.stop()
+                event.prevent_default()
+                return
+            # Sem sugestão: deixa o Tab seguir para o ``focus_next`` da Screen.
+            return
+
+        await super()._on_key(event)
+
+    def action_history_previous(self) -> None:
+        if self.app.dropdown.display:
+            self.app._dropdown_prev()
+        else:
+            self.app._history_prev()
+
+    def action_history_next(self) -> None:
+        if self.app.dropdown.display:
+            self.app._dropdown_next()
+        else:
+            self.app._history_next()
 
 
 class ConfirmScreen(ModalScreen[bool]):
@@ -170,14 +210,15 @@ class MyCLIApp(App):
 
     #input-container {
         layout: horizontal;
-        height: 3;
+        height: auto;
+        max-height: 10;
         background: $panel;
         border-top: solid $primary;
     }
 
     #prompt {
         width: 3;
-        content-align: center middle;
+        content-align: center top;
         background: $panel;
         color: $primary;
         text-style: bold;
@@ -185,9 +226,15 @@ class MyCLIApp(App):
 
     #input {
         width: 1fr;
+        height: auto;
+        max-height: 8;
         background: transparent;
         border: none;
         padding: 0 1;
+    }
+
+    #input .text-area--cursor-line {
+        background: transparent;
     }
 
     #command-dropdown {
@@ -313,7 +360,8 @@ class MyCLIApp(App):
         self.dropdown.display = False
         self.command_history: list[str] = self._load_history()
         self.history_index: int = -1
-        self._suppress_dropdown = False
+        self._history_draft = ""
+        self._suppress_changes = 0
 
         self._search_timer = None
         self._status_timer = None
@@ -328,7 +376,7 @@ class MyCLIApp(App):
 
         self._harness_engine = None
         try:
-            from commands.complements.harness import engine as harness_engine
+            from commands.complements.harness_core import engine as harness_engine
 
             self._harness_engine = harness_engine
             harness_engine.set_confirm_handler(self._confirm_harness)
@@ -384,35 +432,16 @@ class MyCLIApp(App):
 
     # ------------------------------------------------------------------ teclado
     def on_key(self, event) -> None:
-        if event.key == "escape" and self.search_bar.display:
+        # Histórico e navegação do dropdown ficam nas bindings do PromptInput;
+        # aqui só tratamos o Esc (fecha a busca ou o dropdown).
+        if event.key != "escape":
+            return
+        if self.search_bar.display:
             event.stop()
             self._close_search()
-            return
-
-        if self.search_bar.display:
-            return
-
-        if self.dropdown.display:
-            if event.key == "down":
-                event.stop()
-                self._dropdown_next()
-            elif event.key == "up":
-                event.stop()
-                self._dropdown_prev()
-            elif event.key in ("escape",):
-                event.stop()
-                self._hide_dropdown()
-            elif event.key == "tab":
-                event.stop()
-                self._apply_completion()
-            return
-
-        if event.key == "up":
+        elif self.dropdown.display:
             event.stop()
-            self._history_prev()
-        elif event.key == "down":
-            event.stop()
-            self._history_next()
+            self._hide_dropdown()
 
     # ------------------------------------------------------------------ ações
     def action_clear_output(self) -> None:
@@ -456,11 +485,19 @@ class MyCLIApp(App):
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "search-input":
             self._schedule_search(event.value)
+
+    def on_text_area_changed(self, event: TextArea.Changed) -> None:
+        if event.text_area.id != "input":
             return
-        if self._suppress_dropdown:
-            self._suppress_dropdown = False
+        if self._suppress_changes:
+            # Mudança programática (histórico/completação): não reabre o
+            # dropdown nem sai do modo de navegação do histórico.
+            self._suppress_changes -= 1
             return
-        value = event.value.strip()
+        # Edição manual: volta ao fim do histórico e guarda o rascunho.
+        self.history_index = -1
+        self._history_draft = self.input.text
+        value = self.input.text.strip()
         if value.startswith("/"):
             self._show_dropdown(value)
         else:
@@ -474,9 +511,10 @@ class MyCLIApp(App):
     async def on_input_submitted(self, event: Input.Submitted):
         if event.input.id == "search-input":
             self._search_next()
-            return
 
-        command = event.value.strip()
+    def submit_command(self) -> None:
+        """Envia o conteúdo da barra de comando (Enter no PromptInput)."""
+        command = " ".join(self.input.text.splitlines()).strip()
 
         if not command:
             return
@@ -499,7 +537,7 @@ class MyCLIApp(App):
         self._remember_command(command)
 
         self.output.write(f"[cyan]> {escape(command)}[/cyan]")
-        self.input.value = ""
+        self._set_input_value("")
         self._start_spinner(command)
         self._run_command(command)
 
@@ -507,7 +545,7 @@ class MyCLIApp(App):
         self._hide_dropdown()
         self._close_search(focus=False)
         self.output.clear()
-        self.input.value = ""
+        self._set_input_value("")
         self.input.focus()
 
     # ------------------------------------------------------------------ dropdown
@@ -593,23 +631,28 @@ class MyCLIApp(App):
         return True
 
     def _complete_with(self, command_name: str) -> None:
-        # O Input.Changed é uma mensagem: marca a próxima mudança para que o
-        # handler não reabra o dropdown de forma assíncrona.
+        # O TextArea.Changed é uma mensagem: a troca programática do texto é
+        # marcada em ``_set_input_value`` para não reabrir o dropdown.
         self._set_input_value(command_name)
         self._hide_dropdown()
         self.input.focus()
 
     def _set_input_value(self, value: str) -> None:
-        if self.input.value != value:
-            self._suppress_dropdown = True
-        self.input.value = value
-        self.input.cursor_position = len(value)
+        if self.input.text == value:
+            self.input.move_cursor((0, len(value)))
+            return
+        # O TextArea.Changed é uma mensagem: conta as mudanças programáticas
+        # para o handler não reabrir o dropdown nem mexer no histórico.
+        self._suppress_changes += 1
+        self.input.load_text(value)
+        self.input.move_cursor((0, len(value)))
 
     # ------------------------------------------------------------------ histórico
     def _history_prev(self):
         if not self.command_history:
             return
         if self.history_index == -1:
+            self._history_draft = self.input.text
             self.history_index = len(self.command_history) - 1
         elif self.history_index > 0:
             self.history_index -= 1
@@ -624,7 +667,7 @@ class MyCLIApp(App):
             self._set_input_value(self.command_history[self.history_index])
         else:
             self.history_index = -1
-            self._set_input_value("")
+            self._set_input_value(self._history_draft)
         self.dropdown.display = False
 
     def _history_path(self) -> Path | None:
@@ -650,6 +693,8 @@ class MyCLIApp(App):
         return [item for item in data if isinstance(item, str)][-self.HISTORY_LIMIT:]
 
     def _remember_command(self, command: str) -> None:
+        self.history_index = -1
+        self._history_draft = ""
         if self.command_history and self.command_history[-1] == command:
             return
         self.command_history.append(command)
@@ -720,7 +765,7 @@ class MyCLIApp(App):
     def _run_command(self, command: str) -> None:
         sink = None
         try:
-            from commands.complements.harness import progress as harness_progress
+            from commands.complements.harness_core import progress as harness_progress
 
             sink = harness_progress
             sink.set_sink(self._write_progress)

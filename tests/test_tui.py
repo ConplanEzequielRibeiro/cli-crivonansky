@@ -145,13 +145,13 @@ def test_dropdown_tab_completion_and_single_enter(tmp_path, monkeypatch):
 
     async def scenario():
         async with app.run_test(size=(80, 20)) as pilot:
-            app.input.value = "/ec"
+            app.input.text = "/ec"
             await pilot.pause()
             assert app.dropdown.display is True
 
             await pilot.press("tab")
             await pilot.pause()
-            assert app.input.value == "/echo"
+            assert app.input.text == "/echo"
             assert app.dropdown.display is False
 
             await pilot.press("enter")
@@ -190,13 +190,103 @@ def test_history_navigation_does_not_open_dropdown(tmp_path, monkeypatch):
 
             app._history_prev()
             await pilot.pause()
-            assert app.input.value == "/fail"
+            assert app.input.text == "/fail"
             assert app.dropdown.display is False
 
             app._history_prev()
             await pilot.pause()
-            assert app.input.value == "/echo --x"
+            assert app.input.text == "/echo --x"
             assert app.dropdown.display is False
+
+    asyncio.run(scenario())
+
+
+def test_history_navigation_starts_at_last_command(tmp_path, monkeypatch):
+    app = make_app(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(80, 20)) as pilot:
+            for command in ("/echo A", "/echo B", "/echo C"):
+                app.input.text = command
+                await pilot.press("enter")
+                await app.workers.wait_for_complete()
+                await pilot.pause()
+
+            app.input.text = "/echo rascunho"
+            await pilot.pause()
+
+            await pilot.press("up")
+            await pilot.pause()
+            # Do último comando digitado para o primeiro.
+            assert app.input.text == "/echo C"
+
+            for expected in ("/echo B", "/echo A", "/echo A"):
+                await pilot.press("up")
+                await pilot.pause()
+                assert app.input.text == expected
+
+            # Ao descer além do mais recente, o rascunho é restaurado.
+            for expected in ("/echo B", "/echo C", "/echo rascunho"):
+                await pilot.press("down")
+                await pilot.pause()
+                assert app.input.text == expected
+
+    asyncio.run(scenario())
+
+
+def test_history_restarts_at_newest_after_recalled_command(tmp_path, monkeypatch):
+    app = make_app(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(80, 20)) as pilot:
+            for command in ("/echo A", "/echo B", "/echo C"):
+                app.input.text = command
+                await pilot.press("enter")
+                await app.workers.wait_for_complete()
+                await pilot.pause()
+
+            # Recupera B (dois ↑) e executa de novo.
+            await pilot.press("up")
+            await pilot.press("up")
+            await pilot.pause()
+            assert app.input.text == "/echo B"
+
+            await pilot.press("enter")
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+
+            # O próximo ↑ deve mostrar o comando recém-digitado, não o anterior.
+            await pilot.press("up")
+            await pilot.pause()
+            assert app.input.text == "/echo B"
+
+            await pilot.press("up")
+            await pilot.pause()
+            assert app.input.text == "/echo C"
+
+    asyncio.run(scenario())
+
+
+def test_command_bar_wraps_long_input(tmp_path, monkeypatch):
+    app = make_app(tmp_path, monkeypatch)
+
+    async def scenario():
+        async with app.run_test(size=(40, 20)) as pilot:
+            container = app.query_one("#input-container")
+            initial_height = container.region.height
+
+            app.input.text = "/echo " + "x" * 200
+            await pilot.pause()
+            await pilot.pause()
+
+            assert app.input.soft_wrap is True
+            assert app.input.wrapped_document.height > 1
+            assert container.region.height > initial_height
+
+            app.input.text = "/echo"
+            await pilot.pause()
+            await pilot.pause()
+            assert container.region.height == initial_height
 
     asyncio.run(scenario())
 
@@ -255,7 +345,7 @@ def test_history_is_persisted(tmp_path, monkeypatch):
 
     async def scenario():
         async with app.run_test(size=(80, 20)) as pilot:
-            app.input.value = "/echo"
+            app.input.text = "/echo"
             await pilot.press("enter")  # comando completo executa direto
             await app.workers.wait_for_complete()
             await pilot.pause()
@@ -348,7 +438,7 @@ def test_harness_confirmation_yes(tmp_path, monkeypatch):
 
     async def scenario():
         async with app.run_test(size=(100, 30)) as pilot:
-            app.input.value = "/harness clean artifacts"
+            app.input.text = "/harness clean artifacts"
             await pilot.press("enter")
             await pilot.pause()
 
@@ -369,7 +459,7 @@ def test_harness_confirmation_no(tmp_path, monkeypatch):
 
     async def scenario():
         async with app.run_test(size=(100, 30)) as pilot:
-            app.input.value = "/harness clean artifacts"
+            app.input.text = "/harness clean artifacts"
             await pilot.press("enter")
             await pilot.pause()
 
