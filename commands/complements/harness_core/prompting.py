@@ -6,6 +6,7 @@ from . import packs
 def render(pack: str) -> str:
     manifest = packs.manifests()[pack]
     tasks = "\n".join(f"- `{task}`" for task in manifest.TASKS)
+    core = ", ".join(f"`{task}`" for task in packs.CORE_TASKS)
     denied = ", ".join(manifest.DEFAULT_LLM_DENIED) or "(nenhuma)"
     return (
         f"Você está usando o plugin `/{manifest.COMMAND}` do harness local.\n"
@@ -17,7 +18,7 @@ def render(pack: str) -> str:
         "params: { ... }\n"
         "```\n\n"
         f"Tarefas do pack:\n{tasks}\n\n"
-        "Tarefas de core disponíveis: `env:check`, `prompt`.\n"
+        f"Tarefas de core disponíveis: {core}.\n"
         f"Blocos do LLM não executam: {denied}.\n"
         "Escritas pedem confirmação; resultados vêm no bloco ```crivonansky-result.\n"
     )

@@ -200,8 +200,12 @@ confirmação somente na linha de comando.
 - `docs`: lista de manuais/tickets importados (`manifest.json`);
 - `rag`: trechos de `rag:search` (requer a API e o RAG instalados).
 
-O texto é impresso e copiado para o clipboard. `prompt` copia apenas o prompt de
-instrução do LLM (contrato, workflow JIT e catálogo).
+O texto é impresso e copiado para o clipboard. `prompt` monta o prompt de instrução na
+execução, a partir do registro de tarefas: catálogo agrupado por comando, com parâmetros,
+intent e descrição, mais a lista de tarefas negadas a blocos do LLM (`policy` +
+`DEFAULT_LLM_DENIED` de cada pack). Nada fica fixo no código, então tarefas novas entram
+no prompt automaticamente. A saída segue o mesmo pipeline das demais tarefas (bloco
+`crivonansky-result` impresso e copiado para o clipboard; `--no-clipboard` desliga a cópia).
 
 ### `tasks` / `runs` / `hooks` / `env:check`
 
@@ -300,7 +304,7 @@ workspace/knowledge/
 | `clean:artifacts` | write | Remove artefatos regeráveis (`knowledge/*`, exceto notas legadas) |
 | `clean:runs` | write | Remove execuções antigas de `runs/` e compacta o `runs.jsonl` |
 | `test:run` / `verify` / `lint` | read | Pipelines do `harness.yaml` |
-| `prompt` | read | Prompt do LLM no clipboard |
+| `prompt` | read | Prompt do LLM com o catálogo vivo (tarefas/parâmetros/negações atuais), no bloco result copiado para o clipboard |
 
 ## Donos das tarefas (packs)
 

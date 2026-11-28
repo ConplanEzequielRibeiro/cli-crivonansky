@@ -30,7 +30,8 @@ DEFAULT_APPLY_TO = ("exec", "ask", "context:pack")
 
 # Nomes de variáveis/chaves tratados como segredo (regex, sem anchors).
 DEFAULT_SECRET_NAMES = (
-    "pass(?:word)?",
+    # ``(?!o)`` evita casar campos como ``proximo_passo`` (passo ≠ senha).
+    "pass(?!o)",
     "senha",
     "pwd",
     "passwd",

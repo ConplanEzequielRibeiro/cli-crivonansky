@@ -126,6 +126,10 @@ Notes:
   only from a unique literal (`private $tabela = 'tb_x';`), and the table is stored
   without the qualifier. `code:brief` lists one item per file and summarizes the other
   spans in `also` (`also_omitted` for the excess).
+- `prompt` (core) builds its catalog from the live registry on every run: tasks, params,
+  intent, description, disabled packs and the LLM-denied list. No hardcoded task list and
+  no clipboard call in the handler; output uses the normal sinks (`crivonansky-result`
+  block + clipboard, `--no-clipboard` honored).
 - `policy.redact` is on by default (PII, secrets, sensitive `db:query` columns);
   `policy.llm_denied_tasks` blocks `shell:run`/`py:run`/`docker:exec`/`watch:*` from LLM
   blocks. `patch:apply` preserves encoding/CRLF/BOM and refuses protected branches.

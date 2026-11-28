@@ -219,17 +219,19 @@ def execute(pack: str, argv: list[str]) -> tuple[bool, dict]:
     if sub == "runs":
         return _runs(pack, config_path, rest)
     if sub == "prompt":
+        no_clipboard = "--no-clipboard" in rest
         if pack == "harness":
-            return _single(pack, config_path, "prompt", {})
+            return _single(pack, config_path, "prompt", {}, no_clipboard=no_clipboard)
         from .prompting import render
 
         text = render(pack)
-        try:
-            import pyperclip
+        if not no_clipboard:
+            try:
+                import pyperclip
 
-            pyperclip.copy(text)
-        except Exception:  # noqa: BLE001
-            pass
+                pyperclip.copy(text)
+            except Exception:  # noqa: BLE001
+                pass
         print(text)
         return True, {"pack": pack}
     if sub == "env:check":

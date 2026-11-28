@@ -40,6 +40,15 @@ def test_secrets_in_code_and_env():
     assert out.count("\n") == text.count("\n")  # preserva a numeração de linhas
 
 
+def test_portuguese_state_field_is_not_a_secret():
+    text = "proximo_passo: <uma frase>"
+
+    out = redact.redact_secrets(text)
+
+    assert out == text
+    assert "x" not in redact.redact_secrets("pass = 'x'")
+
+
 def test_private_key_block_keeps_line_count():
     text = "a\n-----BEGIN RSA PRIVATE KEY-----\nAAAA\nBBBB\n-----END RSA PRIVATE KEY-----\nb\n"
 
